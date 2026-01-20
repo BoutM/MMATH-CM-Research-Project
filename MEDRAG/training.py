@@ -42,7 +42,7 @@ class QPDataset(Dataset):
 dataset = QPDataset(queries, passages)
 dataloader = DataLoader(
     dataset,
-    batch_size=32,   # IMPORTANT
+    batch_size=32,   # BATCH SIZE IMPORTANT
     shuffle=True
 )
 
@@ -62,7 +62,7 @@ class BiEncoder(nn.Module):
         return out.last_hidden_state[:, 0]  # CLS
     
 
-def contrastive_loss(q_emb, p_emb, temperature=0.03):
+def contrastive_loss(q_emb, p_emb, temperature=1.0):
 
     """
     q_emb: (B, D)
@@ -142,11 +142,11 @@ plt.xlabel("Epoch")
 plt.legend()
 
 plt.style.use('bmh')
-plt.savefig("/work/mbouthil/projects/research_project/MEDRAG/figures/loss_curve.png", dpi=300)
+plt.savefig("/work/mbouthil/projects/research_project/MEDRAG/figures/loss_curve_2.png", dpi=300)
 
 save_dir = "/work/mbouthil/projects/research_project/MEDRAG/model_weights"
 
-model.query_encoder.save_pretrained(f"{save_dir}/query_encoder")
-model.passage_encoder.save_pretrained(f"{save_dir}/passage_encoder")
+model.query_encoder.save_pretrained(f"{save_dir}/query_encoder_2")
+model.passage_encoder.save_pretrained(f"{save_dir}/passage_encoder_2")
 
 tokenizer.save_pretrained(save_dir)
