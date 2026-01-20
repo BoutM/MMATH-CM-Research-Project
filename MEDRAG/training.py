@@ -18,7 +18,7 @@ from dotenv import load_dotenv
 import os
 
 # Loading data
-df = pd.read_csv("/work/mbouthil/projects/research_project/MEDRAG/synthetic_data/synq.csv")
+df = pd.read_csv("/work/mbouthil/projects/research_project/MEDRAG/synthetic_data/add_synq.csv")
 
 queries = ['Subject ID: ' + str(df['SUBJECT_ID'].iloc[i]) + '\n'  + str(df['QUERY'].iloc[i]) for i in range(len(df))]
 passages = ['Subject ID: ' + str(df['SUBJECT_ID'].iloc[i]) + '\n'  + str(df['PASSAGE'].iloc[i]) for i in range(len(df))]
@@ -142,11 +142,11 @@ plt.xlabel("Epoch")
 plt.legend()
 
 plt.style.use('bmh')
-plt.savefig("/work/mbouthil/projects/research_project/MEDRAG/figures/loss_curve_2.png", dpi=300)
+plt.savefig("/work/mbouthil/projects/research_project/MEDRAG/figures/loss_curve_3.png", dpi=300)
 
+# Saving Encoder Weights
 save_dir = "/work/mbouthil/projects/research_project/MEDRAG/model_weights"
-
-model.query_encoder.save_pretrained(f"{save_dir}/query_encoder_2")
-model.passage_encoder.save_pretrained(f"{save_dir}/passage_encoder_2")
+model.query_encoder.save_pretrained(f"{save_dir}/query_encoder_3")
+model.passage_encoder.save_pretrained(f"{save_dir}/passage_encoder_3")
 
 tokenizer.save_pretrained(save_dir)
