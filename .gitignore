@@ -15,9 +15,9 @@ checkpoints/
 results/
 
 # Data to ignore
-MIMIC-III_data/
-MEDRAG/synthetic_data/
-MEDRAG/retrieval_data/
+RAG/datasets/
+RAG/retrieval_data/
+RAG/query_data/
 
 # Model Weights
 *.safetensors
@@ -26,7 +26,7 @@ MEDRAG/retrieval_data/
 *.ckpt
 
 # Model Folder
-MEDRAG/model_weights/
+RAG/model_weights/
 
 # Hugging Face Login Token:
 token.env
