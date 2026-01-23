@@ -149,4 +149,4 @@ save_dir = "/work/mbouthil/projects/research_project/MEDRAG/model_weights"
 model.query_encoder.save_pretrained(f"{save_dir}/query_encoder_3")
 model.passage_encoder.save_pretrained(f"{save_dir}/passage_encoder_3")
 
-tokenizer.save_pretrained(save_dir)
+# tokenizer.save_pretrained(save_dir)
