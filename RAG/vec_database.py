@@ -12,15 +12,26 @@ import faiss
 import json
 from beir.datasets.data_loader import GenericDataLoader
 
+
+# Streaming Code
+def stream_msmarco_chunks(path, chunk_size=5000):
+    buffer = []
+    with open(path, "r") as f:
+        for line in f:
+            doc = json.loads(line)
+            buffer.append((doc["_id"], doc["text"]))
+
+            if len(buffer) == chunk_size:
+                yield buffer
+                buffer = []
+
+        if buffer:
+            yield buffer
+
+
 # Loading Data
-data_dir = "/work/mbouthil/projects/research_project/RAG/datasets/msmarco"
-corpus, _, _ = GenericDataLoader(data_folder=data_dir).load(split="train")
-passages = [corpus[doc_id]["text"] for doc_id in corpus]
-
-
-# Selecting Device
+data_path = "/work/mbouthil/projects/research_project/RAG/datasets/msmarco/corpus.jsonl"
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
 
 # Loading Passage Encoder
 tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
@@ -30,107 +41,102 @@ passage_encoder = AutoModel.from_pretrained(
 passage_encoder.eval()
 
 
-# Custom MSMARCO class
-class MSMARCO:
-    def __init__(self, passages):
-    
-        '''
-        DataLoader for Vector Database
-        '''
+DIM = 768
+NLIST = 4096
+M = 64
+NBITS = 8
 
-        self.passages = passages
-    
-    def __len__(self):
-        return len(self.passages)
-    
-    def __getitem__(self, idx):
-        passage = self.passages[idx]
-        return {"passage": passage}
+TRAIN_SIZE = 100_000 
+BATCH_SIZE = 64
+CHUNK_SIZE = 5000
 
+quantizer = faiss.IndexFlatIP(DIM)
+index = faiss.IndexIVFPQ(
+    quantizer,
+    DIM,
+    NLIST,
+    M,
+    NBITS
+)
 
-dataset = MSMARCO(passages)
+train_buf = []
+train_count = 0
+train_ids = []
 
-
-def collate_fn(batch:int, tokenizer:object, max_length:int=128) -> dict:
-
-    passages = [x['passage'] for x in batch]
-    p_tok = tokenizer(passages, 
-                      padding=True,
-                      truncation=True, 
-                      max_length=max_length,
-                      return_tensors='pt'
-                      )
-    return {'passages': p_tok}
-
-
-# Dataloader
-dataloader = DataLoader(dataset,
-                        batch_size=32,
-                        shuffle=False,
-                        num_workers=4,
-                        pin_memory=True)
-                        #collate_fn=lambda x:collate_fn(x, tokenizer))
-
-
-
-dataloader = DataLoader(dataset, batch_size=64)
-
-
-index = faiss.IndexFlatIP(768)
 meta_file = open("/work/mbouthil/projects/research_project/RAG/retrieval_data/passage_metadata.jsonl", "w")
 global_idx = 0
 
-for batch in dataloader:
-    with torch.no_grad():
-        inputs = tokenizer(
-            batch['passage'],
-            padding=True,
-            truncation=True,
-            max_length=128,
-            return_tensors='pt'
-        ).to(device)
+for chunk in stream_msmarco_chunks(data_path, 5000):
 
-        emb = passage_encoder(**inputs).last_hidden_state[:, 0]
+    for i in range(0, len(chunk), BATCH_SIZE):
+        batch = chunk[i : i + BATCH_SIZE]
+        passages = [x[1] for x in batch]
+        doc_ids = [x[0] for x in batch]
 
-    emb = emb.float().cpu().numpy()
-    emb = np.ascontiguousarray(emb, dtype=np.float32)
-    faiss.normalize_L2(emb)
-    index.add(emb)
+    
+        with torch.no_grad():
+            inputs = tokenizer(
+                passages,
+                padding=True,
+                truncation=True,
+                max_length=128,
+                return_tensors='pt'
+            ).to(device)
 
-    for i, passage in enumerate(batch['passage']):
-        meta = {
-            'passage': passage,
-            'idx': global_idx
-        }
-        meta_file.write(json.dumps(meta) + "\n")
-        global_idx += 1
+            emb = passage_encoder(**inputs).last_hidden_state[:, 0]
 
-    del emb, inputs
+        emb = emb.float().cpu().numpy()
+        emb = np.ascontiguousarray(emb, dtype=np.float32)
+        faiss.normalize_L2(emb)
+
+        if not index.is_trained:
+            train_buf.append(emb)
+            train_ids.extend(doc_ids)
+            train_count += emb.shape[0]
+
+            if train_count >= TRAIN_SIZE:
+                print(f"Training FAISS index on {train_count} vectors")
+
+                train_vecs = np.vstack(train_buf)
+                index.train(train_vecs)
+                index.add(train_vecs)
+
+                # WRITE METADATA FOR TRAINING VECTORS
+                for doc_id in train_ids:
+                    meta_file.write(json.dumps({
+                        "idx": global_idx,
+                        "doc_id": doc_id
+                    }) + "\n")
+                    global_idx += 1
+
+                del train_vecs
+                del train_buf
+                del train_ids
+                train_buf = None
+                train_ids = None
+
+                print("FAISS index trained")
+
+            continue
+
+        if index.is_trained:
+            index.add(emb)
+
+        for doc_id in doc_ids:
+            meta_file.write(json.dumps({
+                "idx": global_idx,
+                "doc_id": doc_id
+            }) + "\n")
+            global_idx += 1
+
+        del emb, inputs
+        
     torch.cuda.empty_cache()
-
-faiss.write_index(index, "/work/mbouthil/projects/research_project/RAG/retrieval_data/passage.index")
-
+    del chunk
 
 
-# # Creating embeddings
-# embeddings = encode_passage(passages)
+meta_file.close()
+faiss.write_index(index, "passage.index")
 
-# # Moving to CPU
-# embeddings_np = embeddings.cpu().numpy().astype("float32")
-# np.save('/work/mbouthil/projects/research_project/RAG/retrieval_data/passage_embeddings.npy', embeddings_np)
 
-# # Creating FAISS Index
-# N, d = embeddings_np.shape
-# index = faiss.IndexFlatIP(d)
-# index.add(embeddings)
-# faiss.write_index(index, "/work/mbouthil/projects/research_project/RAG/retrieval_data/passage.index")
-
-# # Creating FAISS metadata.json
-with open("/work/mbouthil/projects/research_project/RAG/retrieval_data/passage_metadata.jsonl", "w") as f:
-    for idx, passage in enumerate(passages):
-        record = {
-            "id": idx,
-            "text": passage
-        }
-        f.write(json.dumps(record) + "\n")
 
