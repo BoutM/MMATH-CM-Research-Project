@@ -16,20 +16,13 @@ import matplotlib.pyplot as plt
 data_dir = "/work/mbouthil/projects/research_project/RAG/datasets/msmarco"
 corpus, queries, qrels = GenericDataLoader(data_folder=data_dir).load(split="train")
 
-# # Limiting the data size
-# n_queries = 100_000
-# limited_query_ids = list(queries.keys())[:n_queries]
-
-# queries = {qid: queries[qid] for qid in limited_query_ids}
-# qrels = {qid: qrels[qid] for qid in limited_query_ids if qid in qrels}
-
 
 class MSMARCO:
     def __init__(self,
                  queries:dict,
                  passages:dict, 
                  qrels:dict, 
-                 num_negatives:int=8):
+                 num_negatives:int=2):
 
         '''Data loader for MS MARCO dataset'''
 
@@ -37,7 +30,6 @@ class MSMARCO:
         self.passages = passages
         self.qrels = qrels
         self.qids = list(self.qrels.keys())
-        self.pids = list(self.passages.keys())
         self.num_negatives = num_negatives
     
     def __len__(self):
@@ -50,12 +42,11 @@ class MSMARCO:
         pos_pids = [k for k, v in self.qrels[qid].items() if v > 0]
         pos_passage = self.passages[random.choice(pos_pids)]['text']
 
-        neg_pids = []
-        while len(neg_pids) < self.num_negatives:
-            pid = random.choice(self.pids)
-            if pid not in pos_pids:
-                neg_pids.append(pid)
-
+        # Sample negatives directly from passages dict
+        neg_passages = []
+        available_pids = list(self.passages.keys())
+        neg_candidates = [pid for pid in available_pids if pid not in pos_pids]
+        neg_pids = random.sample(neg_candidates, min(self.num_negatives, len(neg_candidates)))
         neg_passages = [self.passages[pid]['text'] for pid in neg_pids]
 
         return {"query": query, "positive": pos_passage, 'negatives': neg_passages}
@@ -99,7 +90,7 @@ dataloader = DataLoader(
     dataset, 
     batch_size=32,
     shuffle=True,
-    num_workers=4,
+    num_workers=0,
     collate_fn=lambda x: collate_fn(x, tokenizer)
 )
 
@@ -126,7 +117,7 @@ model = DualEncoder(
 ).to(device)
 
 
-def contrastive_loss(q_emb:Tensor, p_emb:Tensor, temperature:float=1.0) -> Tensor:
+def contrastive_loss(q_emb:Tensor, p_emb:Tensor, temperature:float=0.3) -> Tensor:
 
     '''
     Cross Entropy loss give that M_query < M_passage
@@ -168,6 +159,9 @@ for i in range(epoch):
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
+
+        del q_emb, p_emb, loss  # Explicitly free memory
+        torch.cuda.empty_cache()  
 
     avg_loss = epoch_loss/len(dataloader)
     train_loss.append(avg_loss)

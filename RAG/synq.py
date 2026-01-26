@@ -3,12 +3,10 @@
 import torch
 from transformers import AutoTokenizer, logging, AutoModelForCausalLM
 logging.set_verbosity_error()
-import os
 import json
 from beir.datasets.data_loader import GenericDataLoader
 from tqdm import tqdm
 from dotenv import load_dotenv
-import os
 import re
 import json
 import os
