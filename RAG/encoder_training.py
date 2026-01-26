@@ -16,12 +16,12 @@ import matplotlib.pyplot as plt
 data_dir = "/work/mbouthil/projects/research_project/RAG/datasets/msmarco"
 corpus, queries, qrels = GenericDataLoader(data_folder=data_dir).load(split="train")
 
-# Limiting the data size
-n_queries = 100_000
-limited_query_ids = list(queries.keys())[:n_queries]
+# # Limiting the data size
+# n_queries = 100_000
+# limited_query_ids = list(queries.keys())[:n_queries]
 
-queries = {qid: queries[qid] for qid in limited_query_ids}
-qrels = {qid: qrels[qid] for qid in limited_query_ids if qid in qrels}
+# queries = {qid: queries[qid] for qid in limited_query_ids}
+# qrels = {qid: qrels[qid] for qid in limited_query_ids if qid in qrels}
 
 
 class MSMARCO:
@@ -146,7 +146,7 @@ def contrastive_loss(q_emb:Tensor, p_emb:Tensor, temperature:float=1.0) -> Tenso
     return loss
 
 optimizer = torch.optim.AdamW(model.parameters(), lr=2e-5)
-epoch = 15
+epoch = 5
 train_loss = []
 
 for i in range(epoch):
@@ -183,12 +183,12 @@ plt.xlabel("Epoch")
 plt.legend()
 
 plt.style.use('bmh')
-plt.savefig("/work/mbouthil/projects/research_project/RAG/figures/loss_curve.png", dpi=300)
+plt.savefig("/work/mbouthil/projects/research_project/RAG/figures/loss_curve_2.png", dpi=300)
 
 
 # Saving Encoder Weights
 save_dir = "/work/mbouthil/projects/research_project/RAG/model_weights"
-model.query_encoder.save_pretrained(f"{save_dir}/query_encoder")
-model.passage_encoder.save_pretrained(f"{save_dir}/passage_encoder")
+model.query_encoder.save_pretrained(f"{save_dir}/query_encoder_2")
+model.passage_encoder.save_pretrained(f"{save_dir}/passage_encoder_2")
 
 tokenizer.save_pretrained(save_dir)
