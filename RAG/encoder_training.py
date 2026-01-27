@@ -12,6 +12,15 @@ from torch import Tensor
 import torch.nn.functional as F
 import matplotlib.pyplot as plt
 
+
+### Important Variables:
+number_of_negatives = 2
+training_batch_size = 32
+dual_encoder_temp = 1
+save_name = "_3"
+epochs = 1
+
+
 # Loading Dataset
 data_dir = "/work/mbouthil/projects/research_project/RAG/datasets/msmarco"
 corpus, queries, qrels = GenericDataLoader(data_folder=data_dir).load(split="train")
@@ -22,7 +31,7 @@ class MSMARCO:
                  queries:dict,
                  passages:dict, 
                  qrels:dict, 
-                 num_negatives:int=2):
+                 num_negatives:int=number_of_negatives):
 
         '''Data loader for MS MARCO dataset'''
 
@@ -88,7 +97,7 @@ tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
 # DataLoader
 dataloader = DataLoader(
     dataset, 
-    batch_size=32,
+    batch_size=training_batch_size,
     shuffle=True,
     num_workers=0,
     collate_fn=lambda x: collate_fn(x, tokenizer)
@@ -117,7 +126,7 @@ model = DualEncoder(
 ).to(device)
 
 
-def contrastive_loss(q_emb:Tensor, p_emb:Tensor, temperature:float=0.3) -> Tensor:
+def contrastive_loss(q_emb:Tensor, p_emb:Tensor, temperature:float=dual_encoder_temp) -> Tensor:
 
     '''
     Cross Entropy loss give that M_query < M_passage
@@ -137,10 +146,9 @@ def contrastive_loss(q_emb:Tensor, p_emb:Tensor, temperature:float=0.3) -> Tenso
     return loss
 
 optimizer = torch.optim.AdamW(model.parameters(), lr=2e-5)
-epoch = 5
 train_loss = []
 
-for i in range(epoch):
+for i in range(epochs):
 
     model.train()
     epoch_loss = 0
@@ -177,12 +185,12 @@ plt.xlabel("Epoch")
 plt.legend()
 
 plt.style.use('bmh')
-plt.savefig("/work/mbouthil/projects/research_project/RAG/figures/loss_curve_2.png", dpi=300)
+plt.savefig("/work/mbouthil/projects/research_project/RAG/figures/loss_curve" + save_name + ".png", dpi=300)
 
 
 # Saving Encoder Weights
 save_dir = "/work/mbouthil/projects/research_project/RAG/model_weights"
-model.query_encoder.save_pretrained(f"{save_dir}/query_encoder_2")
-model.passage_encoder.save_pretrained(f"{save_dir}/passage_encoder_2")
+model.query_encoder.save_pretrained(f"{save_dir}/query_encoder" + save_name)
+model.passage_encoder.save_pretrained(f"{save_dir}/passage_encoder_2" + save_name)
 
 tokenizer.save_pretrained(save_dir)

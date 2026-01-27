@@ -39,77 +39,114 @@ DIM = 768
 NLIST = 4096
 M = 64
 NBITS = 8
-TRAIN_SIZE = 100_000 
+
+TRAIN_SIZE = 100_000
 BATCH_SIZE = 64
 CHUNK_SIZE = 5000
 
+# -------------------------------
+# FAISS INDEX (IP = dot product)
+# -------------------------------
 quantizer = faiss.IndexFlatIP(DIM)
-index = faiss.IndexIVFPQ(quantizer, DIM, NLIST, M, NBITS)
+index = faiss.IndexIVFPQ(
+    quantizer,
+    DIM,
+    NLIST,
+    M,
+    NBITS
+)
 
+index.nprobe = 16
+
+# -------------------------------
+# TRAINING BUFFER
+# -------------------------------
 train_buf = []
 train_count = 0
-train_ids = []
-meta_file = open("/work/mbouthil/projects/research_project/RAG/retrieval_data/passage_metadata.jsonl", "w")
+is_trained = False
+
+meta_file = open(
+    "/work/mbouthil/projects/research_project/RAG/retrieval_data/passage_metadata.jsonl",
+    "w"
+)
+
 global_idx = 0
 
+# -------------------------------
+# STREAM DATA
+# -------------------------------
 for chunk in stream_msmarco_chunks(data_path, CHUNK_SIZE):
     for i in range(0, len(chunk), BATCH_SIZE):
+
         batch = chunk[i : i + BATCH_SIZE]
         passages = [x[1] for x in batch]
         doc_ids = [x[0] for x in batch]
-        
+
+        # -------------------------------
+        # EMBEDDINGS
+        # -------------------------------
         with torch.no_grad():
             inputs = tokenizer(
                 passages,
                 padding=True,
                 truncation=True,
                 max_length=128,
-                return_tensors='pt'
+                return_tensors="pt"
             ).to(device)
+
             emb = passage_encoder(**inputs).last_hidden_state[:, 0]
             emb = emb.float().cpu().numpy()
             emb = np.ascontiguousarray(emb, dtype=np.float32)
+
             faiss.normalize_L2(emb)
-        
-        # COLLECT TRAINING DATA
-        if not index.is_trained:
+
+        # -------------------------------
+        # TRAINING PHASE
+        # -------------------------------
+        if not is_trained:
             train_buf.append(emb)
-            train_ids.extend(doc_ids)
             train_count += emb.shape[0]
-            
-            # TRAIN WHEN THRESHOLD REACHED
+
             if train_count >= TRAIN_SIZE:
                 print(f"Training FAISS index on {train_count} vectors")
+
                 train_vecs = np.vstack(train_buf)
                 index.train(train_vecs)
-                index.add(train_vecs)
-                
-                # WRITE METADATA FOR TRAINING VECTORS
-                for doc_id in train_ids:
-                    meta_file.write(json.dumps({
-                        "idx": global_idx,
-                        "doc_id": doc_id
-                    }) + "\n")
-                    global_idx += 1
-                
-                # CLEANUP
-                del train_vecs
+                index.add(train_vecs)  # ADD TRAINING VECTORS
+
+                is_trained = True
                 train_buf = []
-                train_ids = []
-                print("FAISS index trained")
-        else:
-            # ADD TO INDEX AFTER TRAINING
+                del train_vecs
+
+                print("✓ FAISS index trained")
+
+        # -------------------------------
+        # ADD CORPUS VECTORS (after training)
+        # -------------------------------
+        elif is_trained:
             index.add(emb)
-            for doc_id in doc_ids:
-                meta_file.write(json.dumps({
-                    "idx": global_idx,
-                    "doc_id": doc_id
-                }) + "\n")
-                global_idx += 1
-        
+
+        # -------------------------------
+        # ALWAYS WRITE METADATA
+        # -------------------------------
+        for doc_id in doc_ids:
+            meta_file.write(json.dumps({
+                "idx": global_idx,
+                "doc_id": doc_id
+            }) + "\n")
+            global_idx += 1
+
         del emb, inputs
         torch.cuda.empty_cache()
 
+# -------------------------------
+# FINALIZE
+# -------------------------------
 meta_file.close()
-faiss.write_index(index, "/work/mbouthil/projects/research_project/RAG/model_weights/passage.index")
-print(f"✓ Index creation complete. Total vectors: {global_idx}")
+
+faiss.write_index(
+    index,
+    "/work/mbouthil/projects/research_project/RAG/model_weights/passage.index"
+)
+
+print(f"✓ Index creation complete. Total vectors indexed: {global_idx}")
