@@ -30,7 +30,7 @@ q_subset = [(keys, values) for keys, values in queries.items()][:N]
 ### Loading LLM ###
 
 # Authenticating Token
-load_dotenv('token.env')
+load_dotenv('/work/mbouthil/MMATH-CM-Research-Project/token.env')
 token = os.getenv('HUGGINGFACE_TOKEN')
 
 # Loading model and Tokenizer
