@@ -15,14 +15,14 @@ import matplotlib.pyplot as plt
 
 ### Important Variables:
 number_of_negatives = 2
-training_batch_size = 32
-dual_encoder_temp = 1
-save_name = "_3"
+training_batch_size = 256
+dual_encoder_temp = 0.3
+save_name = "_v1"
 epochs = 1
 
 
 # Loading Dataset
-data_dir = "/work/mbouthil/projects/research_project/RAG/datasets/msmarco"
+data_dir = "/work/mbouthil/datasets/msmarco"
 corpus, queries, qrels = GenericDataLoader(data_folder=data_dir).load(split="train")
 
 
@@ -33,7 +33,9 @@ class MSMARCO:
                  qrels:dict, 
                  num_negatives:int=number_of_negatives):
 
-        '''Data loader for MS MARCO dataset'''
+        '''
+        Data loader for MS MARCO dataset
+        '''
 
         self.queries = queries
         self.passages = passages
@@ -128,10 +130,6 @@ model = DualEncoder(
 
 def contrastive_loss(q_emb:Tensor, p_emb:Tensor, temperature:float=dual_encoder_temp) -> Tensor:
 
-    '''
-    Cross Entropy loss give that M_query < M_passage
-    '''
-
     M = q_emb.shape[0]
     N = p_emb.shape[0]
 
@@ -185,12 +183,12 @@ plt.xlabel("Epoch")
 plt.legend()
 
 plt.style.use('bmh')
-plt.savefig("/work/mbouthil/projects/research_project/RAG/figures/loss_curve" + save_name + ".png", dpi=300)
+plt.savefig("/work/mbouthil/MMATH-CM-Research-Project/RAG/figures/loss_curve" + save_name + ".png", dpi=300)
 
 
 # Saving Encoder Weights
-save_dir = "/work/mbouthil/projects/research_project/RAG/model_weights"
+save_dir = "/work/mbouthil/MMATH-CM-Research-Project/RAG/model_weights"
 model.query_encoder.save_pretrained(f"{save_dir}/query_encoder" + save_name)
-model.passage_encoder.save_pretrained(f"{save_dir}/passage_encoder_2" + save_name)
+model.passage_encoder.save_pretrained(f"{save_dir}/passage_encoder" + save_name)
 
 tokenizer.save_pretrained(save_dir)

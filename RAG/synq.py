@@ -17,7 +17,7 @@ N=100_000
 
 
 ### Loading data ###
-data_dir = "/work/mbouthil/projects/research_project/RAG/datasets/msmarco"
+data_dir = "/work/mbouthil/datasets/msmarco"
 corpus, queries, qrels = GenericDataLoader(data_folder=data_dir).load(split="train")
 t_corpus = corpus.copy()
 t_queries = queries.copy()
@@ -138,8 +138,8 @@ for i, id in enumerate(old_ids):
 
 ### Saving new dataset ###
 # paths
-original_dir = "/work/mbouthil/projects/research_project/RAG/datasets/msmarco"
-modified_dir = "/work/mbouthil/projects/research_project/RAG/datasets/msmarco_modified"
+original_dir = "/work/mbouthil/datasets/msmarco"
+modified_dir = original_dir + "_synq_1"
 
 # Create directories
 os.makedirs(modified_dir, exist_ok=True)
