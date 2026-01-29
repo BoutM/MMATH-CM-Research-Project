@@ -11,19 +11,30 @@ import torch.nn as nn
 from torch import Tensor
 import torch.nn.functional as F
 import matplotlib.pyplot as plt
+import random
+
+### Data Subset Length Percentage:
+p = .20
 
 
 ### Important Variables:
 number_of_negatives = 2
 training_batch_size = 256
 dual_encoder_temp = 0.3
-save_name = "_v1"
-epochs = 1
+save_name = "_sq1"
+epochs = 20
 
 
 # Loading Dataset
-data_dir = "/work/mbouthil/datasets/msmarco"
+data_dir = "/work/mbouthil/datasets/msmarco_synq_1"
 corpus, queries, qrels = GenericDataLoader(data_folder=data_dir).load(split="train")
+
+# queries = dict([(key, query) for key, query in queries.items()][:int(p*len(queries))])
+# qrels = dict([(qid, pids) for qid, pids in qrels.items() if qid in queries.keys()])
+
+keys = random.sample([key for key in queries.keys()], int(p*len(queries)))
+queries = dict([(id, query) for id, query in queries.items() if id in keys])
+qrels = dict([(qid, pid) for qid, pid in qrels.items() if qid in keys])
 
 
 class MSMARCO:
