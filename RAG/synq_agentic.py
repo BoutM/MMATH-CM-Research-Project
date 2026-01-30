@@ -117,7 +117,7 @@ def llm_pass(
 
 
 ### Creating Batches ###
-def batch_splits(queries:list, batch_size:int=64) -> list[tuple[str, str]]:
+def batch_splits(queries:list, batch_size:int=64) -> list[tuple[str,str]]:
 
     for i in range(0, len(queries), batch_size):
         yield queries[i:i + batch_size]
@@ -178,6 +178,8 @@ for batch in batches:
         queries[new_id] = syn_queries[i]
         global_counter += 1
 
+    print('Batch Complted')
+
 
 
 ### Saving new dataset ###
@@ -210,3 +212,5 @@ with open(qrels_path, 'w') as f:
     for query_id, doc_scores in qrels.items():
         for doc_id, score in doc_scores.items():
             f.write(f"{str(query_id)}\t{str(doc_id)}\t{score}\n")
+
+print('Data Saved')

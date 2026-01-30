@@ -44,9 +44,6 @@ TRAIN_SIZE = 100_000
 BATCH_SIZE = 64
 CHUNK_SIZE = 5000
 
-# -------------------------------
-# FAISS INDEX (IP = dot product)
-# -------------------------------
 quantizer = faiss.IndexFlatIP(DIM)
 index = faiss.IndexIVFPQ(
     quantizer,
@@ -58,9 +55,6 @@ index = faiss.IndexIVFPQ(
 
 index.nprobe = 16
 
-# -------------------------------
-# TRAINING BUFFER
-# -------------------------------
 train_buf = []
 train_count = 0
 is_trained = False
@@ -72,9 +66,6 @@ meta_file = open(
 
 global_idx = 0
 
-# -------------------------------
-# STREAM DATA
-# -------------------------------
 for chunk in stream_msmarco_chunks(data_path, CHUNK_SIZE):
     for i in range(0, len(chunk), BATCH_SIZE):
 
@@ -82,9 +73,6 @@ for chunk in stream_msmarco_chunks(data_path, CHUNK_SIZE):
         passages = [x[1] for x in batch]
         doc_ids = [x[0] for x in batch]
 
-        # -------------------------------
-        # EMBEDDINGS
-        # -------------------------------
         with torch.no_grad():
             inputs = tokenizer(
                 passages,
@@ -100,9 +88,6 @@ for chunk in stream_msmarco_chunks(data_path, CHUNK_SIZE):
 
             faiss.normalize_L2(emb)
 
-        # -------------------------------
-        # TRAINING PHASE
-        # -------------------------------
         if not is_trained:
             train_buf.append(emb)
             train_count += emb.shape[0]
@@ -120,15 +105,9 @@ for chunk in stream_msmarco_chunks(data_path, CHUNK_SIZE):
 
                 print("✓ FAISS index trained")
 
-        # -------------------------------
-        # ADD CORPUS VECTORS (after training)
-        # -------------------------------
         elif is_trained:
             index.add(emb)
 
-        # -------------------------------
-        # ALWAYS WRITE METADATA
-        # -------------------------------
         for doc_id in doc_ids:
             meta_file.write(json.dumps({
                 "idx": global_idx,
@@ -139,9 +118,6 @@ for chunk in stream_msmarco_chunks(data_path, CHUNK_SIZE):
         del emb, inputs
         torch.cuda.empty_cache()
 
-# -------------------------------
-# FINALIZE
-# -------------------------------
 meta_file.close()
 
 faiss.write_index(

@@ -13,26 +13,28 @@ import torch.nn.functional as F
 import matplotlib.pyplot as plt
 import random
 
+
 ### Data Subset Length Percentage:
-p = .20
+N = 100_000
 
 
 ### Important Variables:
 number_of_negatives = 2
 training_batch_size = 256
 dual_encoder_temp = 0.3
-save_name = "_sq1"
+save_name = "_sq2"
 epochs = 20
 
 
 # Loading Dataset
-data_dir = "/work/mbouthil/datasets/msmarco_synq_1"
+data_dir = "/work/mbouthil/datasets/msmarco_synq_2"
 corpus, queries, qrels = GenericDataLoader(data_folder=data_dir).load(split="train")
 
 # queries = dict([(key, query) for key, query in queries.items()][:int(p*len(queries))])
 # qrels = dict([(qid, pids) for qid, pids in qrels.items() if qid in queries.keys()])
 
-keys = random.sample([key for key in queries.keys()], int(p*len(queries)))
+random.seed(42)
+keys = random.sample([key for key in queries.keys()], N)
 queries = dict([(id, query) for id, query in queries.items() if id in keys])
 qrels = dict([(qid, pid) for qid, pid in qrels.items() if qid in keys])
 
@@ -157,6 +159,7 @@ def contrastive_loss(q_emb:Tensor, p_emb:Tensor, temperature:float=dual_encoder_
 optimizer = torch.optim.AdamW(model.parameters(), lr=2e-5)
 train_loss = []
 
+print('Training Beginning')
 for i in range(epochs):
 
     model.train()
@@ -178,10 +181,13 @@ for i in range(epochs):
         optimizer.step()
 
         del q_emb, p_emb, loss  # Explicitly free memory
-        torch.cuda.empty_cache()  
+        torch.cuda.empty_cache()
+        break
 
     avg_loss = epoch_loss/len(dataloader)
     train_loss.append(avg_loss)
+    print('Epoch Completed')
+    break
 
 # plotting Loss
 plt.figure(figsize=(12, 12))
@@ -203,3 +209,5 @@ model.query_encoder.save_pretrained(f"{save_dir}/query_encoder" + save_name)
 model.passage_encoder.save_pretrained(f"{save_dir}/passage_encoder" + save_name)
 
 tokenizer.save_pretrained(save_dir)
+
+print('Training Complete')
