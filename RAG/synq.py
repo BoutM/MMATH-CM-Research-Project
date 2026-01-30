@@ -1,29 +1,34 @@
-# Creation of Additional Synthetic Queries
-
-import torch
-from transformers import AutoTokenizer, logging, AutoModelForCausalLM
-logging.set_verbosity_error()
-import json
-from beir.datasets.data_loader import GenericDataLoader
-from tqdm import tqdm
-from dotenv import load_dotenv
-import re
-import json
+# Loading Packages
+import pandas as pd
+import numpy as np
+import random
 import os
+import torch
+import faiss
+import json
+import re
 import shutil
+import random
+from tqdm import tqdm
+from torch import Tensor
+from dotenv import load_dotenv
+from huggingface_hub import login
+from torch.utils.data import DataLoader
+from beir.datasets.data_loader import GenericDataLoader
+from transformers import AutoTokenizer, logging, AutoModel, AutoModelForCausalLM
+logging.set_verbosity_error()
 
 # Additional Synthetic Queries to be created:
 N=100_000
+file_name = '_synq_1'
 
 
 ### Loading data ###
 data_dir = "/work/mbouthil/datasets/msmarco"
 corpus, queries, qrels = GenericDataLoader(data_folder=data_dir).load(split="train")
-t_corpus = corpus.copy()
-t_queries = queries.copy()
-t_qrels = qrels.copy()
 
-max_id = int(max([int(key) for key in t_queries.keys()]))
+
+# Creating Query Subset
 q_subset = [(keys, values) for keys, values in queries.items()][:N]
 
 
@@ -58,14 +63,14 @@ the provided query, however, posed differently. Provide only the new query and f
 
 
 ### LLM function ###
-def llm_call(notes: list[str], system_prompt:str) -> list[str]:
-    messages = [
-        [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": note}
-        ]
-        for note in notes
-    ]
+def llm_pass(
+        messages:list[list[dict]],
+        padding:bool=True,
+        truncation:bool=True,
+        max_tokens:int=256, 
+        temp:float=0.1,
+        top_p:float=0.9,
+) -> list[str]:
 
     prompts = tokenizer.apply_chat_template(
         messages,
@@ -76,29 +81,29 @@ def llm_call(notes: list[str], system_prompt:str) -> list[str]:
     inputs = tokenizer(
         prompts,
         return_tensors="pt",
-        padding=True,
-        truncation=True
+        padding=padding,
+        truncation=truncation
     ).to(model.device)
 
     with torch.no_grad():
         outputs = model.generate(
             **inputs,
-            max_new_tokens=256,
-            temperature=0.1,
-            top_p=0.9,
+            max_new_tokens=max_tokens,
+            temperature=temp,
+            top_p=top_p,
             do_sample=True
         )
 
     responses = []
-    for i in range(len(notes)):
+    for i in range(len(messages)):
         gen = outputs[i][inputs["input_ids"].shape[1]:]
         responses.append(tokenizer.decode(gen, skip_special_tokens=True))
 
     return responses
 
 
-### Creating Batches ###
-def batch_splits(queries:list, batch_size:int=64):
+def batch_splits(queries:list, batch_size:int=64) -> list[tuple[str, str]]:
+
     for i in range(0, len(queries), batch_size):
         yield queries[i:i + batch_size]
 
@@ -106,63 +111,64 @@ batches = batch_splits(q_subset)
 
 
 ### Creating new queries ###
-new_queries = []
-old_ids = []
+max_id = int(max([int(key) for key in queries.keys()]))
+global_counter = max_id + 1 
 
 for batch in batches:
 
-    ids = [id[0] for id in batch]
-    queries = [id[1] for id in batch]
+    ids, old_queries = zip(*batch)
 
-    queries = llm_call(queries, system_prompt)
-    queries = [
+    messages = [
+        [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": query}
+        ]
+        for query in old_queries
+    ]
+    syn_queries = llm_pass(messages)
+
+    # Cleaning New Queries
+    syn_queries = [
         re.findall(r'\*\*([^*]+)\*\*', query)[0] 
         if len(re.findall(r'\*\*([^*]+)\*\*', query)) != 0 
         else query 
-        for query in queries
+        for query in syn_queries
         ]
-    new_queries.extend(queries)
-    old_ids.extend(ids)
-
-
-
-### Expanding Dataset ###
-new_q_id = max_id + 1 
-
-for i, id in enumerate(old_ids):
-
-    t_queries[new_q_id] = new_queries[i]            # Creating new query
-    t_qrels[new_q_id] = t_qrels[id]                 # Mapping new query to positive passages
-    new_q_id += 1
+    
+    for i, id in enumerate(ids):
+        new_id = global_counter
+        qrels[new_id] = qrels[id]
+        queries[new_id] = syn_queries[i]
+        global_counter += 1
 
 
 ### Saving new dataset ###
-# paths
+# Creating directories
 original_dir = "/work/mbouthil/datasets/msmarco"
-modified_dir = original_dir + "_synq_1"
-
-# Create directories
+modified_dir = original_dir + file_name
 os.makedirs(modified_dir, exist_ok=True)
 os.makedirs(os.path.join(modified_dir, "qrels"), exist_ok=True)
 
-# Copy old Corpus 
+
+# Copying old Corpus 
 shutil.copy(
     f"{original_dir}/corpus.jsonl", 
     f"{modified_dir}/corpus.jsonl"
 )
 
-# Saving queries with additional ones
+
+# Saving queries
 queries_path = os.path.join(modified_dir, "queries.jsonl")
 with open(queries_path, 'w') as f:
-    for query_id, query_text in t_queries.items():
-        entry = {"_id": str(query_id), "text": query_text}  # Force string
+    for query_id, query_text in queries.items():
+        entry = {"_id": str(query_id), "text": query_text}
         f.write(json.dumps(entry) + '\n')
 
 
-# Save qrels with additional ones
+# Saving qrels
 qrels_path = os.path.join(modified_dir, "qrels", "train.tsv")
 with open(qrels_path, 'w') as f:
     f.write("query-id\tcorpus-id\tscore\n")
-    for query_id, doc_scores in t_qrels.items():
+    for query_id, doc_scores in qrels.items():
         for doc_id, score in doc_scores.items():
-            f.write(f"{str(query_id)}\t{str(doc_id)}\t{score}\n")  # Force string
+            f.write(f"{str(query_id)}\t{str(doc_id)}\t{score}\n")

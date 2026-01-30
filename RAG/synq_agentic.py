@@ -11,15 +11,16 @@ import shutil
 import random
 from tqdm import tqdm
 from torch import Tensor
-from torch.utils.data import DataLoader
-from transformers import AutoTokenizer, logging, AutoModel, AutoModelForCausalLM
-logging.set_verbosity_error()
-from beir.datasets.data_loader import GenericDataLoader
 from dotenv import load_dotenv
 from huggingface_hub import login
+from torch.utils.data import DataLoader
+from beir.datasets.data_loader import GenericDataLoader
+from transformers import AutoTokenizer, logging, AutoModel, AutoModelForCausalLM
+logging.set_verbosity_error()
 
 # Additional Synthetic Queries to be created
 N=100_000
+file_name = 'synq_2'
 
 
 # Loading Data
@@ -31,11 +32,13 @@ corpus, queries, qrels = GenericDataLoader(data_folder=data_dir).load(split='tra
 q_subset = [(keys, values) for keys, values in queries.items()][:N]
 
 
-# Loading LLM
+### Loading LLM ###
+
+# Authenticating Token
 load_dotenv('/work/mbouthil/MMATH-CM-Research-Project/token.env')
 token = os.getenv('HUGGINGFACE_TOKEN')
-login(token=token)
 
+# Loading model and Tokenizer
 model_name = "meta-llama/Llama-3.1-8B-Instruct"
 tokenizer =  AutoTokenizer.from_pretrained(model_name, token=token)
 tokenizer.pad_token = tokenizer.eos_token
@@ -48,6 +51,7 @@ model = AutoModelForCausalLM.from_pretrained(
 )
 
 
+### Sysyem Prompts ###
 cot_prompt='''
 You are a helpful AI assistant. You are to follow the following instructions:
 
@@ -120,9 +124,10 @@ def batch_splits(queries:list, batch_size:int=64) -> list[tuple[str, str]]:
 
 batches = batch_splits(q_subset)
 
+
+### Creating new queries ###
 max_id = int(max([int(key) for key in queries.keys()]))
 global_counter = max_id + 1 
-
 
 for batch in batches:
 
@@ -176,35 +181,32 @@ for batch in batches:
 
 
 ### Saving new dataset ###
-# paths
+# Creating directories
 original_dir = "/work/mbouthil/datasets/msmarco"
-modified_dir = original_dir + "_synq_2"
-
-
-# Create directories
+modified_dir = original_dir + file_name
 os.makedirs(modified_dir, exist_ok=True)
 os.makedirs(os.path.join(modified_dir, "qrels"), exist_ok=True)
 
 
-# Copy old Corpus 
+# Copying old Corpus 
 shutil.copy(
     f"{original_dir}/corpus.jsonl", 
     f"{modified_dir}/corpus.jsonl"
 )
 
 
-# Saving queries with additional ones
+# Saving queries
 queries_path = os.path.join(modified_dir, "queries.jsonl")
 with open(queries_path, 'w') as f:
     for query_id, query_text in queries.items():
-        entry = {"_id": str(query_id), "text": query_text}  # Force string
+        entry = {"_id": str(query_id), "text": query_text}
         f.write(json.dumps(entry) + '\n')
 
 
-# Save qrels with additional ones
+# Saving qrels
 qrels_path = os.path.join(modified_dir, "qrels", "train.tsv")
 with open(qrels_path, 'w') as f:
     f.write("query-id\tcorpus-id\tscore\n")
     for query_id, doc_scores in qrels.items():
         for doc_id, score in doc_scores.items():
-            f.write(f"{str(query_id)}\t{str(doc_id)}\t{score}\n")  # Force string
+            f.write(f"{str(query_id)}\t{str(doc_id)}\t{score}\n")
