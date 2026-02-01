@@ -18,6 +18,7 @@ from beir.datasets.data_loader import GenericDataLoader
 from transformers import AutoTokenizer, logging, AutoModel, AutoModelForCausalLM
 logging.set_verbosity_error()
 
+
 # Additional Synthetic Queries to be created
 N=100_000
 file_name = 'synq_2'
@@ -33,7 +34,6 @@ q_subset = [(keys, values) for keys, values in queries.items()][:N]
 
 
 ### Loading LLM ###
-
 # Authenticating Token
 load_dotenv('/work/mbouthil/MMATH-CM-Research-Project/token.env')
 token = os.getenv('HUGGINGFACE_TOKEN')
@@ -117,7 +117,9 @@ def llm_pass(
 
 
 ### Creating Batches ###
-def batch_splits(queries:list, batch_size:int=64) -> list[tuple[str,str]]:
+def batch_splits(queries:list,
+                batch_size:int=64
+) -> list[tuple[str,str]]:
 
     for i in range(0, len(queries), batch_size):
         yield queries[i:i + batch_size]
@@ -128,6 +130,7 @@ batches = batch_splits(q_subset)
 ### Creating new queries ###
 max_id = int(max([int(key) for key in queries.keys()]))
 global_counter = max_id + 1 
+
 
 for batch in batches:
 

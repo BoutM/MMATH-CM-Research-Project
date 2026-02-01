@@ -14,12 +14,11 @@ import matplotlib.pyplot as plt
 import random
 
 
-### Data Subset Length Percentage:
+### Data Subset ###
 N = 100_000
 
 
-### Important Variables:
-number_of_negatives = 2
+### Important Variables ###
 training_batch_size = 256
 dual_encoder_temp = 0.3
 save_name = "_sq2"
