@@ -81,10 +81,6 @@ class MSMARCO:
             pos_passage = self.passages[random.choice(pos_pids)]['text']
             self.available_pids = self.available_pids - set(pos_pids)
 
-            # # Sample negatives directly from passages dict
-            # neg_pids = random.sample(list(self.available_pids), self.num_negatives)
-            # neg_passages = [self.passages[pid]['text'] for pid in neg_pids]
-
             self.valid_idx.remove(idx)
             self.sample_counter += 1
             sample_selected = True
@@ -94,7 +90,7 @@ class MSMARCO:
             self.available_pids = set(self.passages.keys())
             self.valid_idx = list(range(len(qrels)))
         
-        return {"query": query, "positive": pos_passage} # 'negatives': neg_passages}
+        return {"query": query, "positive": pos_passage}
     
     # Tokenization
 def collate_fn(batch, tokenizer, max_length=128):
@@ -147,6 +143,7 @@ model = DualEncoder(
     query_model_name="bert-base-uncased",
     passage_model_name="bert-base-uncased"
 ).to(device)
+optimizer = torch.optim.AdamW(model.parameters(), lr=2e-5)
 
 
 def contrastive_loss(q_emb:Tensor, p_emb:Tensor, temperature:float=dual_encoder_temp) -> Tensor:
@@ -165,13 +162,15 @@ def contrastive_loss(q_emb:Tensor, p_emb:Tensor, temperature:float=dual_encoder_
     return loss
 
 
-batch_sizes = [16, 32, 64, 128, 256, 512]
+batch_sizes = [16, 32, 64, 128, 256] #, 512]
 times = []
+model.train()
 
 for size in batch_sizes:
 
-    dataset = MSMARCO(queries, corpus, qrels, batch_size=size)
+    start = time.time()
 
+    dataset = MSMARCO(queries, corpus, qrels, batch_size=size)
     dataloader = DataLoader(
         dataset, 
         batch_size=size,
@@ -180,19 +179,9 @@ for size in batch_sizes:
         collate_fn=lambda x: collate_fn(x, tokenizer)
     )
 
-    model = DualEncoder(
-        query_model_name="bert-base-uncased",
-        passage_model_name="bert-base-uncased"
-    ).to(device)
-
-    optimizer = torch.optim.AdamW(model.parameters(), lr=2e-5)
     train_loss = []
-    
-
-    model.train()
     epoch_loss = 0
 
-    start = time.time()
     for step, batch in enumerate(dataloader):
 
         q_inputs = {k: v.to(device) for k, v in batch["query"].items()}
@@ -203,7 +192,7 @@ for size in batch_sizes:
 
         loss = contrastive_loss(q_emb, p_emb)
         epoch_loss += loss.item()
-
+        
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
@@ -213,15 +202,17 @@ for size in batch_sizes:
         end = time.time()
         break
 
+    del dataset
+
     times.append((end-start)/size)
+
 
 plt.figure(figsize=(12, 12))
 plt.suptitle("Batch Size Training Time")
-
 plt.plot(batch_sizes, times, label="Training Loss", linestyle="-", marker="o")
-plt.ylabel("Seconds")
+plt.ylabel("Seconds per Sample")
 plt.xlabel("Batch Size")
+plt.xticks(batch_sizes, batch_sizes)
 plt.legend()
-
 plt.style.use('bmh')
 plt.savefig("/work/mbouthil/MMATH-CM-Research-Project/RAG/figures/batch_time.png", dpi=300)

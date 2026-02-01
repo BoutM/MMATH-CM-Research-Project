@@ -1,91 +1,131 @@
 # Training of the Dual Encoders using contrastive loss
-
 import pandas as pd
 import numpy as np
-from beir.datasets.data_loader import GenericDataLoader
 import random
-from torch.utils.data import DataLoader
-from transformers import AutoTokenizer, AutoModel
+import os
 import torch
-import torch.nn as nn
-from torch import Tensor
-import torch.nn.functional as F
-import matplotlib.pyplot as plt
+import faiss
+import json
+import re
+import shutil
 import random
+import torch
+import time
+import torch.nn as nn
+from tqdm import tqdm
+from torch import Tensor
+import matplotlib.pyplot as plt
+import torch.nn.functional as F
+from dotenv import load_dotenv
+from huggingface_hub import login
+from torch.utils.data import DataLoader
+from beir.datasets.data_loader import GenericDataLoader
+from transformers import AutoTokenizer, logging, AutoModel, AutoModelForCausalLM
+logging.set_verbosity_error()
 
 
+##### Pre Ambles #####
 ### Data Subset ###
 N = 100_000
 
-
-### Important Variables ###
-training_batch_size = 256
+### Parameters ###
+batch_size = 128
 dual_encoder_temp = 0.3
+learning_rate = 2e-5
+epochs = 1
 save_name = "_sq2"
-epochs = 20
 
 
-# Loading Dataset
-data_dir = "/work/mbouthil/datasets/msmarco_synq_2"
+### Loading Dataset ###
+data_dir = "/work/mbouthil/datasets/msmarco"
 corpus, queries, qrels = GenericDataLoader(data_folder=data_dir).load(split="train")
+device = "cuda" if torch.cuda.is_available() else "cpu"
 
-# queries = dict([(key, query) for key, query in queries.items()][:int(p*len(queries))])
-# qrels = dict([(qid, pids) for qid, pids in qrels.items() if qid in queries.keys()])
-
-random.seed(42)
-keys = random.sample([key for key in queries.keys()], N)
+# Creating subset
+print('Creating subset')
+keys = set(random.sample([key for key in queries.keys()], N))
 queries = dict([(id, query) for id, query in queries.items() if id in keys])
 qrels = dict([(qid, pid) for qid, pid in qrels.items() if qid in keys])
+print('Subset created')
 
-
+### MSMARCO class ###
 class MSMARCO:
     def __init__(self,
                  queries:dict,
                  passages:dict, 
-                 qrels:dict, 
-                 num_negatives:int=number_of_negatives):
+                 qrels:dict,
+                 batch_size:int):
 
         '''
-        Data loader for MS MARCO dataset
+        Dataset formatter for MS MARCO dataset
         '''
 
         self.queries = queries
         self.passages = passages
         self.qrels = qrels
         self.qids = list(self.qrels.keys())
-        self.num_negatives = num_negatives
+
+        self.batch_size = batch_size
+        self.sample_counter = 0
+        self.valid_idx = list(range(len(qrels)))
+        self.available_pids = set(self.passages.keys())
     
     def __len__(self):
         return len(self.qrels)
     
+    def find_alternative(self):
+        return random.choice(self.valid_idx)
+    
     def __getitem__(self, idx):
-        qid = self.qids[idx]
-        query = self.queries[qid]
 
-        pos_pids = [k for k, v in self.qrels[qid].items() if v > 0]
-        pos_passage = self.passages[random.choice(pos_pids)]['text']
+        '''
+        Given an index, the function returns a valid positive query passage pair (q,p).
+        This function is constructed such that a query will only have one corresponding 
+        positive passage within its batch.
 
-        # Sample negatives directly from passages dict
-        neg_passages = []
-        available_pids = list(self.passages.keys())
-        neg_candidates = [pid for pid in available_pids if pid not in pos_pids]
-        neg_pids = random.sample(neg_candidates, min(self.num_negatives, len(neg_candidates)))
-        neg_passages = [self.passages[pid]['text'] for pid in neg_pids]
+        Note: If the provided index is invalid, (as another in batch positive is present)
+        the function will return an alternative query passage pair
 
-        return {"query": query, "positive": pos_passage, 'negatives': neg_passages}
+            idx: query idx 
+        '''
+
+        sample_selected = False
+        idx = idx
+
+        while not sample_selected:
+
+            qid = self.qids[idx]            # Select query id using idx
+            query = self.queries[qid]       # Select corresponding query text
+
+            pos_pids = [k for k, v in qrels[qid].items() if v > 0 and k in self.available_pids]    # Selects random pos_id
+
+            if len(pos_pids) < 1:
+                self.valid_idx.remove(idx)
+                idx = random.choice(self.valid_idx)
+                continue
+
+            pos_passage = self.passages[random.choice(pos_pids)]['text']
+            self.available_pids = self.available_pids - set(pos_pids)
+
+            self.valid_idx.remove(idx)
+            self.sample_counter += 1
+            sample_selected = True
+
+        if self.sample_counter == self.batch_size:
+            self.sample_counter = 0
+            self.available_pids = set(self.passages.keys())
+            self.valid_idx = list(range(len(qrels)))
+        
+        return {"query": query, "positive": pos_passage}
     
 
-dataset = MSMARCO(queries, corpus, qrels)
+dataset = MSMARCO(queries, corpus, qrels, batch_size)
 
 
-# Tokenization
+# Tokenization function for batches
 def collate_fn(batch, tokenizer, max_length=128):
     queries = [x['query'] for x in batch]
     positives = [x['positive'] for x in batch]
-    negatives = []
-
-    for x in batch:
-        negatives.extend(x['negatives'])
 
     q_tok = tokenizer(
         queries, 
@@ -96,7 +136,7 @@ def collate_fn(batch, tokenizer, max_length=128):
     )
 
     p_tok = tokenizer(
-        positives + negatives,
+        positives,
         padding=True,
         truncation=True,
         max_length=max_length,
@@ -105,19 +145,8 @@ def collate_fn(batch, tokenizer, max_length=128):
 
     return {"query": q_tok, "passages":p_tok}
 
-
 tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
 
-# DataLoader
-dataloader = DataLoader(
-    dataset, 
-    batch_size=training_batch_size,
-    shuffle=True,
-    num_workers=0,
-    collate_fn=lambda x: collate_fn(x, tokenizer)
-)
-
-device = "cuda" if torch.cuda.is_available() else "cpu"
 
 class DualEncoder(nn.Module):
     def __init__(self, query_model_name, passage_model_name):
@@ -127,12 +156,21 @@ class DualEncoder(nn.Module):
 
     def encode_query(self, **inputs):
         out = self.query_encoder(**inputs)
-        return out.last_hidden_state[:, 0]        # CLS
+        return out.last_hidden_state[:, 0]
     
     def encode_passage(self, **inputs):
         out = self.passage_encoder(**inputs)
-        return out.last_hidden_state[:, 0]        # CLS 
+        return out.last_hidden_state[:, 0]
     
+
+# DataLoader
+dataloader = DataLoader(
+    dataset, 
+    batch_size=batch_size,
+    shuffle=True,
+    num_workers=0,
+    collate_fn=lambda x: collate_fn(x, tokenizer)
+)
 
 model = DualEncoder(
     query_model_name="bert-base-uncased",
@@ -142,27 +180,39 @@ model = DualEncoder(
 
 def contrastive_loss(q_emb:Tensor, p_emb:Tensor, temperature:float=dual_encoder_temp) -> Tensor:
 
-    M = q_emb.shape[0]
-    N = p_emb.shape[0]
+    '''
+    This function calculates the constractive loss (Info NCE) of the query 
+    embedding matrix and passsage embedding matrix. 
 
-    q_emb = F.normalize(q_emb, dim=-1)
-    p_emb = F.normalize(p_emb, dim=-1)
+        q_emb: M x N matrix
+        p_emb: L x N matrix
+        temperature: float (0, 1]
+    '''
+
+    M = q_emb.shape[0]                                      # Number of query rows
+    L = p_emb.shape[0]                                      # Number of passage rows 
+
+    q_emb = F.normalize(q_emb, dim=-1)                      # Normalizing
+    p_emb = F.normalize(p_emb, dim=-1)                      # Normalizing
     
-    scores = torch.matmul(q_emb, p_emb.T)/temperature
-    labels = torch.arange(M) * int(N/M)
+    scores = torch.matmul(q_emb, p_emb.T)/temperature       # Calculating similarity scores (cosine similarity)
+    labels = torch.arange(M) * int(L/M)                     # Gathering labels
     labels = labels.to(device=scores.device)
 
-    loss = F.cross_entropy(scores, labels)
+    loss = F.cross_entropy(scores, labels)                  # Calculating Cross Entropy Loss = Info NCE
     return loss
 
-optimizer = torch.optim.AdamW(model.parameters(), lr=2e-5)
+
+optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
 train_loss = []
 
-print('Training Beginning')
+
+print('\nTraining...\n')
 for i in range(epochs):
 
     model.train()
     epoch_loss = 0
+    start = time.time()
 
     for step, batch in enumerate(dataloader):
 
@@ -181,23 +231,21 @@ for i in range(epochs):
 
         del q_emb, p_emb, loss  # Explicitly free memory
         torch.cuda.empty_cache()
-        break
 
     avg_loss = epoch_loss/len(dataloader)
     train_loss.append(avg_loss)
-    print('Epoch Completed')
-    break
+    print(f'Epoch {i+1} Complete')
+    print((time.time() - start)/60)
+
+print('Training Complete')
 
 # plotting Loss
 plt.figure(figsize=(12, 12))
 plt.suptitle("Bi-Encoder Training Loss")
-
 plt.plot(range(1, len(train_loss)+1), train_loss, label="Training Loss", linestyle="-", marker="o")
-
 plt.ylabel("Loss")
 plt.xlabel("Epoch")
 plt.legend()
-
 plt.style.use('bmh')
 plt.savefig("/work/mbouthil/MMATH-CM-Research-Project/RAG/figures/loss_curve" + save_name + ".png", dpi=300)
 
@@ -206,7 +254,6 @@ plt.savefig("/work/mbouthil/MMATH-CM-Research-Project/RAG/figures/loss_curve" + 
 save_dir = "/work/mbouthil/MMATH-CM-Research-Project/RAG/model_weights"
 model.query_encoder.save_pretrained(f"{save_dir}/query_encoder" + save_name)
 model.passage_encoder.save_pretrained(f"{save_dir}/passage_encoder" + save_name)
-
 tokenizer.save_pretrained(save_dir)
 
-print('Training Complete')
+print("Models saved")
