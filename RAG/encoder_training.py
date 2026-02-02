@@ -19,107 +19,113 @@ import torch.nn.functional as F
 from dotenv import load_dotenv
 from huggingface_hub import login
 from torch.utils.data import DataLoader
+from torch.cuda.amp import autocast, GradScaler
 from beir.datasets.data_loader import GenericDataLoader
 from transformers import AutoTokenizer, logging, AutoModel, AutoModelForCausalLM
 logging.set_verbosity_error()
 
 
-##### Pre Ambles #####
-### Data Subset ###
-N = 100_000
-
 ### Parameters ###
-batch_size = 128
-dual_encoder_temp = 0.3
-learning_rate = 2e-5
-epochs = 1
-save_name = "_sq2"
+batch_size=128
+dual_encoder_temp=0.3
+learning_rate=1e-4
+epochs=50
+save_name= "_s2"
 
+torch.backends.cudnn.benchmark = True
 
 ### Loading Dataset ###
-data_dir = "/work/mbouthil/datasets/msmarco"
+data_dir = "/work/mbouthil/datasets/msmarco_synq_2"
 corpus, queries, qrels = GenericDataLoader(data_folder=data_dir).load(split="train")
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
-# Creating subset
-print('Creating subset')
-keys = set(random.sample([key for key in queries.keys()], N))
-queries = dict([(id, query) for id, query in queries.items() if id in keys])
-qrels = dict([(qid, pid) for qid, pid in qrels.items() if qid in keys])
-print('Subset created')
 
-### MSMARCO class ###
 class MSMARCO:
-    def __init__(self,
-                 queries:dict,
-                 passages:dict, 
-                 qrels:dict,
-                 batch_size:int):
-
-        '''
-        Dataset formatter for MS MARCO dataset
-        '''
+    def __init__(self, queries, passages, qrels):
 
         self.queries = queries
         self.passages = passages
         self.qrels = qrels
-        self.qids = list(self.qrels.keys())
+
+    def __len__(self):
+        return (len(self.queries))
+    
+    def __getitem__(self, pair):
+
+        qid, pid = pair
+
+        query = self.queries[qid]
+        passage = self.passages[pid]['text']
+
+        return {"query": query, "positive": passage}
+
+
+class BatchSampler:
+    def __init__(self, 
+                queries:dict, 
+                passages:dict, 
+                qrels:dict, 
+                batch_size:int=batch_size, 
+                shuffle:bool=True):
 
         self.batch_size = batch_size
-        self.sample_counter = 0
-        self.valid_idx = list(range(len(qrels)))
-        self.available_pids = set(self.passages.keys())
+        self.shuffle = shuffle
+
+        self.qrels = qrels
+        self.pids = set(passages.keys())
+        self.qids = list(queries.keys())
+
+        self.batches = self._create_batches(batch_size)
+
+    def _create_batches(self, batch_size):
+
+        batches = []
+        remaining_qids = self.qids.copy()
+
+        while len(remaining_qids) >= self.batch_size:
+
+            random.shuffle(remaining_qids)
+            current_batch = []
+            unavailable_pids = set()
+            qids_to_remove = []
+
+            for qid in remaining_qids:
+                pos_pids = [k for k, v in self.qrels[qid].items() 
+                            if k not in unavailable_pids and v > 0]
+
+                if pos_pids:
+                    pid = random.choice(pos_pids)
+                    current_batch.append((qid, pid))
+                    unavailable_pids.update(pos_pids)
+                    qids_to_remove.append(qid)
+
+                    if len(current_batch) == self.batch_size:
+                        break
+                else:
+                    continue
+
+            for qid in qids_to_remove:
+                remaining_qids.remove(qid)
+            batches.append(current_batch)
+
+        return batches
     
+    
+    def __iter__(self):
+        '''
+        Iteratior that yeilds batches. Called at the beginning of the epoch
+        '''
+        if self.shuffle:
+            indices = list(range(len(self.batches)))
+            random.shuffle(indices)
+            for idx in indices:
+                yield self.batches[idx]
+        else:
+            for batch in self.batches:
+                yield batch
+
     def __len__(self):
-        return len(self.qrels)
-    
-    def find_alternative(self):
-        return random.choice(self.valid_idx)
-    
-    def __getitem__(self, idx):
-
-        '''
-        Given an index, the function returns a valid positive query passage pair (q,p).
-        This function is constructed such that a query will only have one corresponding 
-        positive passage within its batch.
-
-        Note: If the provided index is invalid, (as another in batch positive is present)
-        the function will return an alternative query passage pair
-
-            idx: query idx 
-        '''
-
-        sample_selected = False
-        idx = idx
-
-        while not sample_selected:
-
-            qid = self.qids[idx]            # Select query id using idx
-            query = self.queries[qid]       # Select corresponding query text
-
-            pos_pids = [k for k, v in qrels[qid].items() if v > 0 and k in self.available_pids]    # Selects random pos_id
-
-            if len(pos_pids) < 1:
-                self.valid_idx.remove(idx)
-                idx = random.choice(self.valid_idx)
-                continue
-
-            pos_passage = self.passages[random.choice(pos_pids)]['text']
-            self.available_pids = self.available_pids - set(pos_pids)
-
-            self.valid_idx.remove(idx)
-            self.sample_counter += 1
-            sample_selected = True
-
-        if self.sample_counter == self.batch_size:
-            self.sample_counter = 0
-            self.available_pids = set(self.passages.keys())
-            self.valid_idx = list(range(len(qrels)))
-        
-        return {"query": query, "positive": pos_passage}
-    
-
-dataset = MSMARCO(queries, corpus, qrels, batch_size)
+        return len(self.batches)
 
 
 # Tokenization function for batches
@@ -147,6 +153,22 @@ def collate_fn(batch, tokenizer, max_length=128):
 
 tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
 
+dataset = MSMARCO(queries, corpus, qrels)
+batch_sampler = BatchSampler(
+    queries=queries,
+    passages=corpus,
+    qrels=qrels)
+
+dataloader = DataLoader(
+    dataset,
+    batch_sampler=batch_sampler,
+    num_workers=4,
+    pin_memory=True,
+    collate_fn=lambda x: collate_fn(x, tokenizer),
+    persistent_workers=True,
+    prefetch_factor=2
+)
+
 
 class DualEncoder(nn.Module):
     def __init__(self, query_model_name, passage_model_name):
@@ -162,16 +184,6 @@ class DualEncoder(nn.Module):
         out = self.passage_encoder(**inputs)
         return out.last_hidden_state[:, 0]
     
-
-# DataLoader
-dataloader = DataLoader(
-    dataset, 
-    batch_size=batch_size,
-    shuffle=True,
-    num_workers=0,
-    collate_fn=lambda x: collate_fn(x, tokenizer)
-)
-
 model = DualEncoder(
     query_model_name="bert-base-uncased",
     passage_model_name="bert-base-uncased"
@@ -203,9 +215,10 @@ def contrastive_loss(q_emb:Tensor, p_emb:Tensor, temperature:float=dual_encoder_
     return loss
 
 
-optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
-train_loss = []
 
+optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
+scaler = GradScaler()
+train_loss = []
 
 print('\nTraining...\n')
 for i in range(epochs):
@@ -219,18 +232,17 @@ for i in range(epochs):
         q_inputs = {k: v.to(device) for k, v in batch["query"].items()}
         p_inputs = {k: v.to(device) for k, v in batch["passages"].items()}
 
-        q_emb = model.encode_query(**q_inputs)
-        p_emb = model.encode_passage(**p_inputs)
+        with autocast():  # fp16 training
+            q_emb = model.encode_query(**q_inputs)
+            p_emb = model.encode_passage(**p_inputs)
+            loss = contrastive_loss(q_emb, p_emb)
 
-        loss = contrastive_loss(q_emb, p_emb)
         epoch_loss += loss.item()
 
         optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
-
-        del q_emb, p_emb, loss  # Explicitly free memory
-        torch.cuda.empty_cache()
+        scaler.scale(loss).backward()
+        scaler.step(optimizer)
+        scaler.update()
 
     avg_loss = epoch_loss/len(dataloader)
     train_loss.append(avg_loss)
@@ -248,7 +260,6 @@ plt.xlabel("Epoch")
 plt.legend()
 plt.style.use('bmh')
 plt.savefig("/work/mbouthil/MMATH-CM-Research-Project/RAG/figures/loss_curve" + save_name + ".png", dpi=300)
-
 
 # Saving Encoder Weights
 save_dir = "/work/mbouthil/MMATH-CM-Research-Project/RAG/model_weights"

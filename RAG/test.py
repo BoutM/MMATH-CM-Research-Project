@@ -32,66 +32,95 @@ data_dir = "/work/mbouthil/datasets/msmarco_synq_2"
 corpus, queries, qrels = GenericDataLoader(data_folder=data_dir).load(split='train')
 
 
-### MSMARCO ###
-class MSMARCO:
-    def __init__(self,
-                 queries:dict,
-                 passages:dict, 
-                 qrels:dict,
-                 batch_size:int):
+class BatchSampler:
+    def __init__(self, queries, passages, qrels, batch_size, shuffle=True):
 
+        self.batch_size = batch_size
+        self.shuffle = shuffle
+
+        self.qrels = qrels
+        self.pids = set(passages.keys())
+        self.qids = list(queries.keys())
+
+        self.batches = self._create_batches(batch_size)
+
+    def _create_batches(self, batch_size):
+
+        batches = []
+        remaining_qids = self.qids.copy()
+
+        while len(remaining_qids) >= self.batch_size:
+
+            print("starting batch")
+
+            random.shuffle(remaining_qids)
+            current_batch = []
+            unavailable_pids = set()
+            qids_to_remove = []
+
+            for qid in remaining_qids:
+
+                pos_pids = [k for k, v in self.qrels[qid].items() 
+                            if k not in unavailable_pids and v > 0]
+
+                if pos_pids:
+
+                    pid = random.choice(pos_pids)
+                    current_batch.append((qid, pid))
+                    unavailable_pids.update(pos_pids)
+                    qids_to_remove.append(qid)
+
+                    if len(current_batch) == self.batch_size:
+                        print('batch completed')
+                        break
+                
+                else:
+                    continue
+
+            for qid in qids_to_remove:
+                remaining_qids.remove(qid)
+
+            batches.append(current_batch)
+
+        return batches
+    
+    def __iter__(self):
         '''
-        Data loader for MS MARCO dataset
+        Iteratior that yeilds batches. Called at the beginning of the epoch
         '''
+        if self.shuffle:
+            indices = list(range(len(self.batches)))
+            random.shuffle(indices)
+            for idx in indices:
+                yield self.batches[idx]
+        else:
+            for batch in self.batches:
+                yield batch
+
+    def __len__(self):
+        return len(self.batches)
+
+
+class MSMARCO:
+    def __init__(self, queries, passages, qrels):
 
         self.queries = queries
         self.passages = passages
         self.qrels = qrels
-        self.qids = list(self.qrels.keys())
 
-        self.batch_size = batch_size
-        self.sample_counter = 0
-        self.valid_idx = list(range(len(qrels)))
-        self.available_pids = set(self.passages.keys())
-    
     def __len__(self):
-        return len(self.qrels)
+        return (len(self.queries))
     
-    def find_alternative(self, idx):
-        return random.choice(self.valid_idx)
+    def __getitem__(self, pair):
 
-    
-    def __getitem__(self, idx):
+        qid, pid = pair
 
-        sample_selected = False
-        idx = idx
+        query = self.queries[qid]
+        passage = self.passages[pid]['text']
 
-        while not sample_selected:
+        return {"query": query, "positive": passage}
 
-            qid = self.qids[idx]            # Select query id using idx
-            query = self.queries[qid]       # Select corresponding query text
 
-            pos_pids = [k for k, v in qrels[qid].items() if v > 0 and k in self.available_pids]    # Selects random pos_id
-
-            if len(pos_pids) < 1:
-                self.valid_idx.remove(idx)
-                idx = random.choice(self.valid_idx)
-                continue
-
-            pos_passage = self.passages[random.choice(pos_pids)]['text']
-            self.available_pids = self.available_pids - set(pos_pids)
-
-            self.valid_idx.remove(idx)
-            self.sample_counter += 1
-            sample_selected = True
-
-        if self.sample_counter == self.batch_size:
-            self.sample_counter = 0
-            self.available_pids = set(self.passages.keys())
-            self.valid_idx = list(range(len(qrels)))
-        
-        return {"query": query, "positive": pos_passage}
-    
     # Tokenization
 def collate_fn(batch, tokenizer, max_length=128):
     queries = [x['query'] for x in batch]
@@ -162,25 +191,34 @@ def contrastive_loss(q_emb:Tensor, p_emb:Tensor, temperature:float=dual_encoder_
     return loss
 
 
+
 batch_sizes = [16, 32, 64, 128, 256] #, 512]
 times = []
 model.train()
 
 for size in batch_sizes:
 
-    start = time.time()
-
-    dataset = MSMARCO(queries, corpus, qrels, batch_size=size)
+    dataset = MSMARCO(queries, corpus, qrels)
+    batch_sampler = BatchSampler(
+        queries=queries,
+        passages=corpus,
+        qrels=qrels,
+        batch_size=128,
+        shuffle=True
+    )
     dataloader = DataLoader(
-        dataset, 
-        batch_size=size,
-        shuffle=True,
-        num_workers=0,
-        collate_fn=lambda x: collate_fn(x, tokenizer)
+        dataset,
+        batch_sampler=batch_sampler,
+        num_workers=4,
+        pin_memory=True,
+        collate_fn=lambda x: collate_fn(x, tokenizer),
+        persistent_workers=True,
+        prefetch_factor=2
     )
 
     train_loss = []
     epoch_loss = 0
+    start = time.time()
 
     for step, batch in enumerate(dataloader):
 
@@ -202,9 +240,8 @@ for size in batch_sizes:
         end = time.time()
         break
 
-    del dataset
-
     times.append((end-start)/size)
+    del dataset
 
 
 plt.figure(figsize=(12, 12))
