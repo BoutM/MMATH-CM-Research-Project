@@ -26,16 +26,16 @@ logging.set_verbosity_error()
 
 
 ### Parameters ###
-batch_size=128
+batch_size=256
 dual_encoder_temp=0.3
 learning_rate=1e-4
 epochs=50
-save_name= "_s2"
+save_name= "_v1"
 
 torch.backends.cudnn.benchmark = True
 
 ### Loading Dataset ###
-data_dir = "/work/mbouthil/datasets/msmarco_synq_2"
+data_dir = "/work/mbouthil/datasets/msmarco"
 corpus, queries, qrels = GenericDataLoader(data_folder=data_dir).load(split="train")
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -220,7 +220,7 @@ optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
 scaler = GradScaler()
 train_loss = []
 
-print('\nTraining...\n')
+print(f'\n{save_name} training in progress...\n')
 for i in range(epochs):
 
     model.train()
