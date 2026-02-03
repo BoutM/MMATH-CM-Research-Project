@@ -30,12 +30,12 @@ batch_size=256
 dual_encoder_temp=0.3
 learning_rate=1e-4
 epochs=50
-save_name= "_v1"
+save_name= "_s2"
 
 torch.backends.cudnn.benchmark = True
 
 ### Loading Dataset ###
-data_dir = "/work/mbouthil/datasets/msmarco"
+data_dir = "/work/mbouthil/datasets/msmarco_synq_2"
 corpus, queries, qrels = GenericDataLoader(data_folder=data_dir).load(split="train")
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -113,7 +113,7 @@ class BatchSampler:
     
     def __iter__(self):
         '''
-        Iteratior that yeilds batches. Called at the beginning of the epoch
+        Iterator that yeilds batches. Called at the beginning of the epoch
         '''
         if self.shuffle:
             indices = list(range(len(self.batches)))
@@ -213,7 +213,6 @@ def contrastive_loss(q_emb:Tensor, p_emb:Tensor, temperature:float=dual_encoder_
 
     loss = F.cross_entropy(scores, labels)                  # Calculating Cross Entropy Loss = Info NCE
     return loss
-
 
 
 optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
