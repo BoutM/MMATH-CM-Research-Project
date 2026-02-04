@@ -18,9 +18,11 @@ from beir.datasets.data_loader import GenericDataLoader
 from transformers import AutoTokenizer, logging, AutoModel, AutoModelForCausalLM
 logging.set_verbosity_error()
 
-# Additional Synthetic Queries to be created:
-N=100_000
-file_name = '_synq_1'
+### Pre ambles ###
+save_name='_syn_que_1'
+llm_temp=0.1
+max_token=256
+test=False
 
 
 ### Loading data ###
@@ -28,12 +30,11 @@ data_dir = "/work/mbouthil/datasets/msmarco"
 corpus, queries, qrels = GenericDataLoader(data_folder=data_dir).load(split="train")
 
 
-# Creating Query Subset
-q_subset = [(keys, values) for keys, values in queries.items()][:N]
+# Gathering query data
+query_info = [(key, value) for key, value in queries.items()]
 
 
-### Loading LLM ###
-
+### Loading LM Model ###
 # Authenticating Token
 load_dotenv('/work/mbouthil/MMATH-CM-Research-Project/token.env')
 token = os.getenv('HUGGINGFACE_TOKEN')
@@ -102,50 +103,50 @@ def llm_pass(
     return responses
 
 
-def batch_splits(queries:list, batch_size:int=64) -> list[tuple[str, str]]:
+def batch_splits(item:list, batch_size:int=64):
 
-    for i in range(0, len(queries), batch_size):
-        yield queries[i:i + batch_size]
+    for i in range(0, len(item), batch_size):
+        yield item[i:i + batch_size]
 
-batches = batch_splits(q_subset)
+batches = batch_splits(query_info)
 
 
 ### Creating new queries ###
-max_id = int(max([int(key) for key in queries.keys()]))
-global_counter = max_id + 1 
-
 for batch in batches:
 
-    ids, old_queries = zip(*batch)
+    max_id = max([int(key) for key in queries.keys()])
+    q_ids, query_texts = zip(*batch)
 
     messages = [
         [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": query}
         ]
-        for query in old_queries
+        for query in query_texts
     ]
-    syn_queries = llm_pass(messages)
-
-    # Cleaning New Queries
-    syn_queries = [
+    new_queries = llm_pass(messages)
+    new_queries = [
         re.findall(r'\*\*([^*]+)\*\*', query)[0] 
         if len(re.findall(r'\*\*([^*]+)\*\*', query)) != 0 
         else query 
-        for query in syn_queries
+        for query in new_queries
         ]
-    
-    for i, id in enumerate(ids):
-        new_id = global_counter
-        qrels[new_id] = qrels[id]
-        queries[new_id] = syn_queries[i]
-        global_counter += 1
+
+    for i, q_id in enumerate(q_ids):
+
+        new_id = max_id + i
+
+        qrels[new_id] = qrels[q_id]
+        queries[new_id] = new_queries[i]
+
+    if test == True:
+        break
 
 
 ### Saving new dataset ###
 # Creating directories
 original_dir = "/work/mbouthil/datasets/msmarco"
-modified_dir = original_dir + file_name
+modified_dir = original_dir + save_name
 os.makedirs(modified_dir, exist_ok=True)
 os.makedirs(os.path.join(modified_dir, "qrels"), exist_ok=True)
 
