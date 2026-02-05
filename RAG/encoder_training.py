@@ -35,7 +35,7 @@ save_name= "_syn_pas_1"
 torch.backends.cudnn.benchmark = True
 
 ### Loading Dataset ###
-data_dir = "/work/mbouthil/datasets/msmarco_syn_pas_1"
+data_dir = "/work/mbouthil/datasets/msmarco_syn_1"
 corpus, queries, qrels = GenericDataLoader(data_folder=data_dir).load(split="train")
 device = "cuda" if torch.cuda.is_available() else "cpu"
 

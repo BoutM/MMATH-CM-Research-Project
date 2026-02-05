@@ -12,6 +12,8 @@ import faiss
 import json
 from beir.datasets.data_loader import GenericDataLoader
 
+encoder_folder = "/work/mbouthil/MMATH-CM-Research-Project/RAG/model_weights/passage_encoder"
+encoder_name = "_syn_que_1"
 
 ### Data Streamer...
 # Streaming Code
@@ -39,16 +41,15 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 ### Loading Passage Encoder ###
+encoder_path = encoder_folder + encoder_name
 tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
-passage_encoder = AutoModel.from_pretrained(
-    "/work/mbouthil/MMATH-CM-Research-Project/RAG/model_weights/passage_encoder_v1"
-).to(device)
+passage_encoder = AutoModel.from_pretrained(encoder_path).to(device)
 passage_encoder.eval()
 
 ### Formating Directories ###
 output_dir = "/work/mbouthil/MMATH-CM-Research-Project/RAG/retrieval_data"
-meta_file = open(f"{output_dir}/passage_metadata_v1.jsonl", "w")
-embeddings_path = f"{output_dir}/embeddings_temp_v1.npy"
+meta_file = open(f"{output_dir}/passage_metadata{encoder_name}.jsonl", "w")
+embeddings_path = f"{output_dir}/embeddings{encoder_name}.npy"
 
 
 
@@ -127,4 +128,4 @@ for start_idx in range(0, total_passages, chunk_size):
     del chunk_emb
     gc.collect()
 
-faiss.write_index(index, f"{output_dir}/passage_v1.index")
+faiss.write_index(index, f"{output_dir}/passage{encoder_name}.index")
