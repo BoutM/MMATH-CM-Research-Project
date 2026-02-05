@@ -133,9 +133,7 @@ for batch in batches:
         ]
 
     for i, q_id in enumerate(q_ids):
-
         new_id = max_id + i
-
         qrels[new_id] = qrels[q_id]
         queries[new_id] = new_queries[i]
 

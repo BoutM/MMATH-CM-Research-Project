@@ -29,13 +29,13 @@ logging.set_verbosity_error()
 batch_size=256
 dual_encoder_temp=0.3
 learning_rate=1e-4
-epochs=50
-save_name= "_s2"
+epochs=30
+save_name= "_syn_pas_1"
 
 torch.backends.cudnn.benchmark = True
 
 ### Loading Dataset ###
-data_dir = "/work/mbouthil/datasets/msmarco_synq_2"
+data_dir = "/work/mbouthil/datasets/msmarco_syn_pas_1"
 corpus, queries, qrels = GenericDataLoader(data_folder=data_dir).load(split="train")
 device = "cuda" if torch.cuda.is_available() else "cpu"
 

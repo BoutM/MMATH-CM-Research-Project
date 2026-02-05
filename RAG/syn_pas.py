@@ -100,9 +100,6 @@ batches = batch_splits(pass_info)
 
 
 
-max_id = max([int(key) for key in corpus.keys()])
-
-
 for batch in batches:
 
     max_id = max([int(key) for key in corpus.keys()])
@@ -142,7 +139,7 @@ shutil.copy(
 # Saving passages + new passages
 corpus_path = os.path.join(modified_dir, "corpus.jsonl")
 with open(corpus_path, 'w') as f:
-    for passage_id, data in queries.items():
+    for passage_id, data in corpus.items():
         entry = {"_id": str(passage_id), "text": data}
         f.write(json.dumps(entry) + '\n')
 
