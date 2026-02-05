@@ -24,6 +24,7 @@ from beir.datasets.data_loader import GenericDataLoader
 from transformers import AutoTokenizer, logging, AutoModel, AutoModelForCausalLM
 logging.set_verbosity_error()
 
+syn_pas_debug = True
 
 ### Parameters ###
 batch_size=256
@@ -32,12 +33,15 @@ learning_rate=1e-4
 epochs=30
 save_name= "_syn_pas_1"
 
-torch.backends.cudnn.benchmark = True
 
 ### Loading Dataset ###
-data_dir = "/work/mbouthil/datasets/msmarco_syn_1"
+data_dir = "/work/mbouthil/datasets/msmarco_syn_pas_1"
 corpus, queries, qrels = GenericDataLoader(data_folder=data_dir).load(split="train")
 device = "cuda" if torch.cuda.is_available() else "cpu"
+
+if syn_pas_debug == True:
+    for key, value in corpus.items():
+        corpus[key] = value['text']
 
 
 class MSMARCO:

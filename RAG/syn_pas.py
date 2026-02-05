@@ -140,7 +140,7 @@ shutil.copy(
 corpus_path = os.path.join(modified_dir, "corpus.jsonl")
 with open(corpus_path, 'w') as f:
     for passage_id, data in corpus.items():
-        entry = {"_id": str(passage_id), "text": data}
+        entry = {str(passage_id): data}
         f.write(json.dumps(entry) + '\n')
 
 
