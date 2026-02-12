@@ -13,7 +13,7 @@ import json
 from beir.datasets.data_loader import GenericDataLoader
 
 encoder_folder = "/work/mbouthil/MMATH-CM-Research-Project/RAG/model_weights/passage_encoder"
-encoder_name = "_syn_que_1"
+encoder_name = "_v01"
 
 ### Data Streamer...
 # Streaming Code

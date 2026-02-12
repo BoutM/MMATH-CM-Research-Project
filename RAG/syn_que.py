@@ -19,7 +19,7 @@ from transformers import AutoTokenizer, logging, AutoModel, AutoModelForCausalLM
 logging.set_verbosity_error()
 
 ### Pre ambles ###
-save_name='_syn_que_1'
+save_name='_synq_final'
 llm_temp=0.1
 max_token=256
 test=False
@@ -57,7 +57,7 @@ system_prompt = '''
 You are a helpful AI Assistant. You are to follow the following instructions:
 
 You will be given a query. Your task is to create a new query that asks the same questions as
-the provided query, however, posed differently. Provide only the new query and format is as follows:
+the provided query, however, posed differently. Provide only the new query and format it as follows:
 
 **new query** 
 '''
@@ -114,7 +114,7 @@ batches = batch_splits(query_info)
 ### Creating new queries ###
 for batch in batches:
 
-    max_id = max([int(key) for key in queries.keys()])
+    max_id = max([int(key) for key in queries.keys()]) + 1
     q_ids, query_texts = zip(*batch)
 
     messages = [
@@ -128,7 +128,7 @@ for batch in batches:
     new_queries = [
         re.findall(r'\*\*([^*]+)\*\*', query)[0] 
         if len(re.findall(r'\*\*([^*]+)\*\*', query)) != 0 
-        else query 
+        else query
         for query in new_queries
         ]
 

@@ -81,7 +81,8 @@ class BatchSampler:
 
         self.batches = self._create_batches(batch_size)
 
-    def _create_batches(self, batch_size):
+### Issue in Batch creation ###
+    def _create_batches(self):
 
         batches = []
         remaining_qids = self.qids.copy()

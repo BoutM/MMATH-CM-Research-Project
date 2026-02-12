@@ -1,5 +1,6 @@
 # Creating additional Passages
 import os
+import re
 import json
 import torch
 import shutil
@@ -9,7 +10,7 @@ from transformers import AutoTokenizer, logging, AutoModelForCausalLM
 logging.set_verbosity_error()
 
 ### Pre ambles ###
-save_name='_synp_1'
+save_name='_synp_final'
 llm_temp=0.1
 max_token=256
 test=False
@@ -21,8 +22,6 @@ corpus, queries, qrels = GenericDataLoader(data_folder=data_dir).load(split="tra
 # Gathering singular query passage mappings
 pass_info = [(key, list(qrels[key].keys())[0], list(qrels[key].values())[0]) 
              for key in qrels.keys() if len(qrels[key]) < 2]
-
-passages = [corpus[str(id)]['text'] for _, id, _ in pass_info]
 
 
 ### Loading LM Model ###
@@ -45,9 +44,12 @@ model = AutoModelForCausalLM.from_pretrained(
 
 ### System instruction prompt ###
 system_prompt='''
-You are a helful AI assistant. 
+You are a helful AI assistant. You are to follow the following instructions:
 
-You are to write a query for the provided passage. Provide only the new query.
+You will be given a passage. Your task is to rewrite the passage. You must ensure that the passage
+contains the same details as the original passage. Provide only the new passage and format it as follows:
+
+**new passage**
 '''
 
 
@@ -99,10 +101,9 @@ def batch_splits(item:list, batch_size:int=64):
 batches = batch_splits(pass_info)
 
 
-
 for batch in batches:
 
-    max_id = max([int(key) for key in corpus.keys()])
+    max_id = max([int(key) for key in corpus.keys()]) + 1
     passages = [corpus[str(id)]['text'] for _, id, _ in batch]
     messages = [
         [
@@ -111,13 +112,18 @@ for batch in batches:
         ]
         for passage in passages
     ]
-    new_passages = llm_pass(messages)
-    new_passages = [passage[11:] for passage in new_passages]
+    new_passages = llm_pass(messages, temp=llm_temp)
+    new_passages = [
+        re.findall(r'\*\*([^*]+)\*\*', passage)[0] 
+        if len(re.findall(r'\*\*([^*]+)\*\*', passage)) != 0 
+        else passage
+        for passage in new_passages
+        ]
 
     for i, tuple in enumerate(batch):
         q_id, p_id, score = tuple
         qrels[q_id] = {p_id: score, str(max_id+i): score}
-        corpus[max_id+i] = {'text': new_passages[i], 'title': ''}
+        corpus[max_id+i] = {'text': new_passages[i], 'title': 'Synthetic passage'}
 
     if test == True:
         break
@@ -140,7 +146,7 @@ shutil.copy(
 corpus_path = os.path.join(modified_dir, "corpus.jsonl")
 with open(corpus_path, 'w') as f:
     for passage_id, data in corpus.items():
-        entry = {str(passage_id): data}
+        entry = {"_id": str(passage_id), **data}
         f.write(json.dumps(entry) + '\n')
 
 
