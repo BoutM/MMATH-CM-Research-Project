@@ -10,10 +10,9 @@ from transformers import AutoTokenizer, logging, AutoModelForCausalLM
 logging.set_verbosity_error()
 
 ### Pre ambles ###
-save_name='_synp_final'
+save_name='syn_p'
 llm_temp=0.1
 max_token=256
-test=False
 
 ### Loading Data ###
 data_dir = "/work/mbouthil/datasets/msmarco"
@@ -124,9 +123,6 @@ for batch in batches:
         q_id, p_id, score = tuple
         qrels[q_id] = {p_id: score, str(max_id+i): score}
         corpus[max_id+i] = {'text': new_passages[i], 'title': 'Synthetic passage'}
-
-    if test == True:
-        break
 
 
 ### Writing new data ###

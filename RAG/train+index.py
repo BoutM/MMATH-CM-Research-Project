@@ -34,12 +34,14 @@ learning_rate=1e-4
 steps=200_000
 plot_loss=True
 
+### Dataset ###
+data_dir = "/work/mbouthil/datasets/msmarco_syn_p"
+
+
 ### Model Name ###
-save_name = "syn_que_final"
+model_name = "syn_p"
 
 
-### Loading Dataset ###
-data_dir = "/work/mbouthil/datasets/msmarco_synq_final"
 corpus, queries, qrels = GenericDataLoader(data_folder=data_dir).load(split="train")
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -111,10 +113,10 @@ def passage_tok(passages:list[str], max_length:int=128) -> dict:
 
 ### Dual Encoder ###
 class DualEncoder(nn.Module):
-    def __init__(self, query_model_name, passage_model_name):
+    def __init__(self, query_model, passage_model):
         super().__init__()
-        self.query_encoder = AutoModel.from_pretrained(query_model_name)
-        self.passage_encoder = AutoModel.from_pretrained(passage_model_name)
+        self.query_encoder = AutoModel.from_pretrained(query_model)
+        self.passage_encoder = AutoModel.from_pretrained(passage_model)
 
     def mean_pool(self, last_hidden_state, attention_mask):
         mask = attention_mask.unsqueeze(-1).float()
@@ -129,8 +131,8 @@ class DualEncoder(nn.Module):
         return self.mean_pool(out.last_hidden_state, inputs["attention_mask"])
     
 model = DualEncoder(
-    query_model_name="bert-base-uncased",
-    passage_model_name="bert-base-uncased"
+    query_model="bert-base-uncased",
+    passage_model="bert-base-uncased"
 ).to(device)
 
 
@@ -166,7 +168,7 @@ scaler = GradScaler()
 step_loss = []
 model.train()
 
-print(save_name, "training in progress...")
+print(model_name, "training in progress...")
 for step in tqdm(range(steps), file=sys.stdout):
 
     start = time.time()
@@ -199,17 +201,24 @@ if plot_loss==True:
     plt.xlabel("Step")
     plt.legend()
     plt.style.use('bmh')
-    plt.savefig(f"/work/mbouthil/MMATH-CM-Research-Project/RAG/figures/loss_curve_{save_name}.png", dpi=300)
+    plt.savefig(f"/work/mbouthil/MMATH-CM-Research-Project/RAG/figures/loss_curve_{model_name}.png", dpi=300)
 
 
 ### Saving Encoder Weights ###
 save_dir = "/work/mbouthil/MMATH-CM-Research-Project/RAG/model_weights"
-model.query_encoder.save_pretrained(f"{save_dir}/query_encoder_{save_name}")
-model.passage_encoder.save_pretrained(f"{save_dir}/passage_encoder_{save_name}")
+model.query_encoder.save_pretrained(f"{save_dir}/query_encoder_{model_name}")
+model.passage_encoder.save_pretrained(f"{save_dir}/passage_encoder_{model_name}")
 
 
 ### Cleaning Env ###
 del queries, corpus, qrels
+
+### Paths and Directories ###
+corpus_path = "/work/mbouthil/datasets/msmarco/corpus.jsonl"
+output_dir = "/work/mbouthil/MMATH-CM-Research-Project/RAG/retrieval_data"
+embeddings_path = f"{output_dir}/embeddings_{model_name}.npy"
+device = "cuda" if torch.cuda.is_available() else "cpu"
+
 
 
 ### Creating Vector Database ###
@@ -227,20 +236,19 @@ def stream_msmarco_chunks(path, chunk_size=5000):
 
 
 ### Loading Passage Encoder ###
+tokenizer = AutoTokenizer.from_pretrained('bert-base-uncased')
 passage_encoder = AutoModel.from_pretrained(
-    f"{save_dir}/passage_encoder_" + save_name
+    f"/work/mbouthil/MMATH-CM-Research-Project/RAG/model_weights/passage_encoder_{model_name}"
     ).to(device)
 passage_encoder.eval()
 
 
-### Formating Directories ###
-output_dir = "/work/mbouthil/MMATH-CM-Research-Project/RAG/retrieval_data"
-embeddings_path = f"{output_dir}/embeddings_{save_name}.npy"
-
-
 ### variables ###
-N = 8,841,823                       # Amounts of passages in the original data corpus
+N = 8_841_823                       # Amounts of passages in the original data corpus
 d = 768                             # Embedding size
+
+
+### Creating memmap ###
 embedding_memmap = np.memmap(
     embeddings_path,
     dtype='float32',
@@ -248,11 +256,10 @@ embedding_memmap = np.memmap(
     shape=(N, d)
 )
 batch_size = 64
-chunksize = 5000
-corpus_path = "/work/mbouthil/datasets/msmarco/corpus.json"
+chunksize=5000
+N = 0
 
 
-total_passages = 0
 
 ### Writting Embeddings ###
 print('Writing index')
@@ -282,8 +289,8 @@ for chunk in stream_msmarco_chunks(corpus_path, chunksize):
             # index.add(emb)           # Add immediately after normalizing
 
             batch_size = emb.shape[0]
-            embedding_memmap[total_passages:total_passages + batch_size] = emb
-            total_passages += batch_size
+            embedding_memmap[N:N + batch_size] = emb
+            N += batch_size
 
             del inputs, emb
 
@@ -295,29 +302,30 @@ for chunk in stream_msmarco_chunks(corpus_path, chunksize):
     gc.collect()
 pbar.close
 
-
 embedding_memmap.flush()
 del embedding_memmap
 
 
-### Writting index ###
+### Reading memmap ###
 embeddings = np.memmap(
     embeddings_path,
     dtype='float32',
     mode='r',
-    shape=(N, 768)
+    shape=(N, d)
 )
 
+### Writting index ###
 index = faiss.IndexFlatIP(d)
 chunk_size = 100_000
 
-for start_idx in range(0, total_passages, chunk_size):
-    end_idx = min(start_idx + chunk_size, total_passages)
+for start_idx in range(0, N, chunk_size):
+    end_idx = min(start_idx + chunk_size, N)
     chunk_emb = np.array(embeddings[start_idx:end_idx])
     index.add(chunk_emb)
     del chunk_emb
     gc.collect()
+    break
 
-faiss.write_index(index, f"{output_dir}/passage_{save_name}.index")
+faiss.write_index(index, f"{output_dir}/passage_{model_name}.index")
 
 print("Traing and vector database construction completed")
