@@ -18,6 +18,9 @@ from beir.datasets.data_loader import GenericDataLoader
 import torch.nn.functional as F
 from beir.retrieval.evaluation import EvaluateRetrieval
 
+### Model Name ###
+model_name = "syn_que_final"
+
 
 ### Loading Data ###
 data_dir = "/work/mbouthil/datasets/msmarco"
@@ -25,14 +28,14 @@ corpus, dev_queries, dev_qrels = GenericDataLoader(data_folder=data_dir).load(sp
 dev_info = [(key, value) for key, value in dev_queries.items()]
 
 # Loading Index
-index = faiss.read_index("/work/mbouthil/MMATH-CM-Research-Project/RAG/retrieval_data/passage_v01.index")
-
+index = faiss.read_index(f"/work/mbouthil/MMATH-CM-Research-Project/RAG/retrieval_data/passage_{model_name}.index")
+print(index.ntotal)
 
 # Loading Query Encoder
 device = "cuda" if torch.cuda.is_available() else "cpu"
 tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
 query_encoder = AutoModel.from_pretrained(
-    "/work/mbouthil/MMATH-CM-Research-Project/RAG/model_weights/query_encoder_v01"
+    f"/work/mbouthil/MMATH-CM-Research-Project/RAG/model_weights/query_encoder_{model_name}"
 ).to(device)
 query_encoder.eval()
 

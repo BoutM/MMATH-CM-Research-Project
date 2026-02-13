@@ -85,7 +85,7 @@ train_batches = batch_splits(train_q)
 test_batches = batch_splits(test_q)
 
 
-sim_q_ids = []
+sim_info = []
 
 for train_batch in train_batches:
 
@@ -98,17 +98,16 @@ for train_batch in train_batches:
         test_emb = encode_query(test_batch)
 
         sim = torch.matmul(test_emb, train_emb.T).detach().cpu().numpy()
-        indices = np.where(sim >= 0.7)
+        indices = np.argwhere(sim >= 0.7)
 
-        q_test_ids = [test_ids[i] for i in set(indices[0])]
-        q_train_ids = [train_ids[i] for i in set(indices[1])]
-        sim_q_ids.extend(list(zip(q_train_ids, q_test_ids)))
+        sim_info.extend([(test_ids[i], train_ids[j], sim[i,j]) 
+                         for i, j in indices])
 
 
 dir = "/work/mbouthil/MMATH-CM-Research-Project/RAG/test_results"
-path = os.path.join(dir, "sim_ids.jsonl")
+path = os.path.join(dir, "sim_info.jsonl")
 
 with open(path, "w") as f:
-    for train_id, test_id in sim_q_ids:
-        entry = {"train_id": train_id, "test_id": test_id}
+    for test_id, train_id, sim_score in sim_info:
+        entry = {"train_id": train_id, "test_id": test_id, "sim_score": sim_score}
         f.write(json.dumps(entry) + "\n")

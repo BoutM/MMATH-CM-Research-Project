@@ -18,7 +18,7 @@ from beir.datasets.data_loader import GenericDataLoader
 
 ### Paths and Directories ###
 corpus_path = "/work/mbouthil/datasets/msmarco/corpus.jsonl"
-model_name = "base_final"
+model_name = "syn_que_final"
 output_dir = "/work/mbouthil/MMATH-CM-Research-Project/RAG/retrieval_data"
 embeddings_path = f"{output_dir}/embeddings_{model_name}.npy"
 device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -127,7 +127,6 @@ for start_idx in range(0, N, chunk_size):
     index.add(chunk_emb)
     del chunk_emb
     gc.collect()
-    break
 
 faiss.write_index(index, f"{output_dir}/passage_{model_name}.index")
 
