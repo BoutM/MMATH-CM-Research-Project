@@ -22,12 +22,11 @@ logging.set_verbosity_error()
 
 # Loading in datasets
 data_dir = "/work/mbouthil/datasets/msmarco"
-train_corpus, train_queries, train_qrels = GenericDataLoader(data_folder=data_dir).load(split='train')
-test_corpus, test_queries, test_qrels = GenericDataLoader(data_folder=data_dir).load(split='dev')
+_, train_queries, _ = GenericDataLoader(data_folder=data_dir).load(split='train')
+_, test_queries, _ = GenericDataLoader(data_folder=data_dir).load(split='dev')
 
-
-test_q = [(q_id, query) for q_id, query in test_queries.items()]
 train_q = [(q_id, query) for q_id, query in train_queries.items()]
+test_q = [(q_id, query) for q_id, query in test_queries.items()]
 
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -81,8 +80,8 @@ def batch_splits(item:list, batch_size:int=100):
     for i in range(0, len(item), batch_size):
         yield item[i:i + batch_size]
 
-train_batches = batch_splits(train_q)
-test_batches = batch_splits(test_q)
+train_batches = list(batch_splits(train_q))
+test_batches = list(batch_splits(test_q))
 
 
 sim_info = []
@@ -100,14 +99,15 @@ for train_batch in train_batches:
         sim = torch.matmul(test_emb, train_emb.T).detach().cpu().numpy()
         indices = np.argwhere(sim >= 0.7)
 
-        sim_info.extend([(test_ids[i], train_ids[j], sim[i,j]) 
+        sim_info.extend([(test_ids[i], train_ids[j], sim[i,j], test_queries[str(test_ids[i])], train_queries[str(train_ids[j])]) 
                          for i, j in indices])
 
 
 dir = "/work/mbouthil/MMATH-CM-Research-Project/RAG/test_results"
 path = os.path.join(dir, "sim_info.jsonl")
 
+
 with open(path, "w") as f:
-    for test_id, train_id, sim_score in sim_info:
-        entry = {"train_id": train_id, "test_id": test_id, "sim_score": sim_score}
+    for test_id, train_id, sim_score, test_text, train_text in sim_info:
+        entry = {"train_id": train_id, "test_id": test_id, "sim_score": float(sim_score), "train_query": train_text, "test_query": test_text}
         f.write(json.dumps(entry) + "\n")

@@ -1,22 +1,29 @@
 # Creating additional Passages
 import os
 import re
+import gc
+import sys
 import json
 import torch
 import shutil
+import numpy as np
+import tqdm as tqdm
 from dotenv import load_dotenv
 from beir.datasets.data_loader import GenericDataLoader
 from transformers import AutoTokenizer, logging, AutoModelForCausalLM
 logging.set_verbosity_error()
 
+
 ### Pre ambles ###
 save_name='syn_p'
 llm_temp=0.1
 max_token=256
+batch_size=64
 
 ### Loading Data ###
 data_dir = "/work/mbouthil/datasets/msmarco"
 corpus, queries, qrels = GenericDataLoader(data_folder=data_dir).load(split="train")
+N = len(corpus)
 
 # Gathering singular query passage mappings
 pass_info = [(key, list(qrels[key].keys())[0], list(qrels[key].values())[0]) 
@@ -97,9 +104,10 @@ def batch_splits(item:list, batch_size:int=64):
     for i in range(0, len(item), batch_size):
         yield item[i:i + batch_size]
 
-batches = batch_splits(pass_info)
+batches = batch_splits(pass_info, batch_size=batch_size)
 
-
+total_batches = np.ceil(N/batch_size)
+counter = 0
 for batch in batches:
 
     max_id = max([int(key) for key in corpus.keys()]) + 1
@@ -124,7 +132,10 @@ for batch in batches:
         qrels[q_id] = {p_id: score, str(max_id+i): score}
         corpus[max_id+i] = {'text': new_passages[i], 'title': 'Synthetic passage'}
 
+    counter += 1
+    print(f"batch {counter} of {total_batches} complete")
 
+print("\nWritting data...")
 ### Writing new data ###
 # Copying queries
 original_dir = "/work/mbouthil/datasets/msmarco"
@@ -153,3 +164,6 @@ with open(qrels_path, 'w') as f:
     for query_id, doc_scores in qrels.items():
         for doc_id, score in doc_scores.items():
             f.write(f"{str(query_id)}\t{str(doc_id)}\t{score}\n")
+
+
+print(f"{save_name} data creation complete")

@@ -4,6 +4,7 @@ import gc
 import torch
 import json
 from transformers import AutoTokenizer, logging, AutoModel
+import torch.nn.functional as F
 logging.set_verbosity_error()
 import numpy as np
 from tqdm import tqdm
@@ -18,7 +19,7 @@ from beir.datasets.data_loader import GenericDataLoader
 
 ### Paths and Directories ###
 corpus_path = "/work/mbouthil/datasets/msmarco/corpus.jsonl"
-model_name = "syn_que_final"
+model_name = "base_final"
 output_dir = "/work/mbouthil/MMATH-CM-Research-Project/RAG/retrieval_data"
 embeddings_path = f"{output_dir}/embeddings_{model_name}.npy"
 device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -65,7 +66,9 @@ N = 0
 
 ### Writting Embeddings ###
 print('Writing index')
-pbar=tqdm(total=np.ceil(N/chunksize), file=sys.stdout)
+total_batches=np.ceil(N/chunksize)
+counter=0
+
 for chunk in stream_msmarco_chunks(corpus_path, chunksize):
 
     for i in range(0, len(chunk), batch_size):
@@ -81,14 +84,14 @@ for chunk in stream_msmarco_chunks(corpus_path, chunksize):
                 return_tensors="pt"
             ).to(device)
 
-            emb = passage_encoder(**inputs).last_hidden_state[:, 0]
+            out = passage_encoder(**inputs)
+            last_hidden_state = out.last_hidden_state
+            mask = inputs['attention_mask'].unsqueeze(-1).float()
+            emb = (last_hidden_state * mask).sum(dim=1) / mask.sum(dim=1)
+            emb = F.normalize(emb, p=2, dim=-1)
+
             emb = emb.float().cpu().numpy()
             emb = np.ascontiguousarray(emb, dtype=np.float32)
-
-            norms = np.linalg.norm(emb, axis=1, keepdims=True)
-            emb = emb / norms
-            # faiss.normalize_L2(emb)  # Keep this one
-            # index.add(emb)           # Add immediately after normalizing
 
             batch_size = emb.shape[0]
             embedding_memmap[N:N + batch_size] = emb
@@ -100,9 +103,8 @@ for chunk in stream_msmarco_chunks(corpus_path, chunksize):
             torch.cuda.empty_cache()
 
     del chunk
-    pbar.update(1)
-    gc.collect()
-pbar.close
+    counter += 1
+    print(f"Chunk {counter} of {total_batches} completed")
 
 embedding_memmap.flush()
 del embedding_memmap
