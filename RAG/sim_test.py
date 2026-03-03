@@ -45,7 +45,7 @@ def query_tok(queries:list[str], max_length:int=32) -> dict:
 
 
 query_encoder = AutoModel.from_pretrained(
-    "/work/mbouthil/MMATH-CM-Research-Project/RAG/model_weights/query_encoder_v01"
+    "bert-base-uncased"
 ).to(device)
 
 
@@ -97,14 +97,16 @@ for train_batch in train_batches:
         test_emb = encode_query(test_batch)
 
         sim = torch.matmul(test_emb, train_emb.T).detach().cpu().numpy()
-        indices = np.argwhere(sim >= 0.7)
+        indices = np.argwhere(sim >= 0.75)
 
         sim_info.extend([(test_ids[i], train_ids[j], sim[i,j], test_queries[str(test_ids[i])], train_queries[str(train_ids[j])]) 
                          for i, j in indices])
+        break
+    break
 
 
-dir = "/work/mbouthil/MMATH-CM-Research-Project/RAG/test_results"
-path = os.path.join(dir, "sim_info.jsonl")
+dir = "/work/mbouthil/datasets/test_results"
+path = os.path.join(dir, "sim_info_test.jsonl")
 
 
 with open(path, "w") as f:

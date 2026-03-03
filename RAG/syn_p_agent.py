@@ -9,6 +9,7 @@ import json
 import re
 import shutil
 import random
+import time
 from tqdm import tqdm
 from torch import Tensor
 from dotenv import load_dotenv
@@ -18,16 +19,11 @@ from beir.datasets.data_loader import GenericDataLoader
 from transformers import AutoTokenizer, logging, AutoModel, AutoModelForCausalLM
 
 
-import socket
-print(socket.gethostbyname("huggingface.co"))
-
-
-
 ### Pre ambles ###
-save_name = 'synp_agentic'
+save_name = 'syn_p_agent_full'
 llm_temp=0.1
-max_token=2000
-test=True
+test=False
+batch_size=128
 
 
 ### Loading Data ###
@@ -68,7 +64,9 @@ Proivide your thoughts:
 creation_prompt=f'''
 You are a helpful AI assistant. 
 
-Your task is to create a new passage from the provided one. Your new rewritten passage the same infromation as the original. 
+Your task is to create a new passage from the provided one. Your new rewritten passage must contain the same infromation as the original. 
+
+Provide only the new passage, formatted as: **new passage**
 
 The following contains thoughts regarding how to rewrite the passage. Use these thoughts to guide your creation of a new passage.
 \n
@@ -88,7 +86,7 @@ def llm_pass(
         messages:list[list[dict]],
         padding:bool=True,
         truncation:bool=True,
-        max_tokens:int=max_token, 
+        max_tokens:int=500, 
         temp:float=llm_temp,
         top_p:float=0.9,
 ) -> list[str]:
@@ -124,24 +122,25 @@ def llm_pass(
 
 
 ### Creating Batches ###
-def batch_splits(queries:list,
-                batch_size:int=64
-) -> list[tuple[str,str]]:
-
+def batch_splits(queries:list, batch_size:int=64) -> list:
     for i in range(0, len(queries), batch_size):
         yield queries[i:i + batch_size]
 
-batches = batch_splits(pass_info)
+batches = batch_splits(pass_info, batch_size=batch_size)
 
 
 ### Creating new passsages ###
-max_id = int(max([int(key) for key in corpus.keys()]))
-global_counter = max_id + 1 
+N = len(pass_info)
+total_iters = np.ceil(N/batch_size)
+iter_counter = 0
 
-
+print(f"Creating {len(pass_info)} agnetic passages...")
+start = time.time()
 for batch in batches:
 
-    passages = [corpus[str(id)]['text'] for _, id, _ in batch]
+    max_id = int(max([int(key) for key in corpus.keys()]))
+    q_ids, p_ids = zip(*[(q_id, p_id) for q_id, p_id, _ in batch])
+    passages = [corpus[str(p_id)]['text'] for p_id in p_ids]
     N = len(passages)
 
     # Step 1
@@ -152,8 +151,9 @@ for batch in batches:
         ]
         for passage in passages
     ]
-    cot_responses = llm_pass(cot_messages)
+    cot_responses = llm_pass(cot_messages, max_tokens=100)
     cot_responses = [response[11:] for response in cot_responses]
+    del cot_messages
 
     # Step 2
     creation_messages = [
@@ -163,40 +163,56 @@ for batch in batches:
         ]
         for i, passage in enumerate(passages)
     ]
-    syn_passages = llm_pass(creation_messages)
-    syn_passages = [passage[11:] for passage in syn_passages]
+    syn_passages = llm_pass(creation_messages, max_tokens=500)
+    del cot_responses, creation_messages
+
+    syn_passages = [
+        re.findall(r'\*\*([^*]+)\*\*', passage)[0] 
+        if len(re.findall(r'\*\*([^*]+)\*\*', passage)) != 0 
+        else passage
+        for passage in syn_passages
+        ]
 
     # Step 3
     judge_messages = [
         [
             {"role": "system", "content": judge_prompt},
             {"role": "user", "content": 
-             str('"' + passages[i] + '"\n\nand \n' + syn_passages[i])
+             str('"' + passages[i] + '"\n\nand \n' + syn_passage)
              }
         ]
-        for i in range(N)
+        for i, syn_passage in enumerate(syn_passages)
     ]
-    verdicts = llm_pass(judge_messages, max_tokens=50)
+    verdicts = llm_pass(judge_messages, max_tokens=25)
     verdicts = [1 if 'TRUE' in answer else 0 for answer in verdicts]
 
-    filtered = [(id, passage) for id, passage, verdict in zip(ids, syn_passages, verdicts) if verdict == 1]
-    ids, syn_passages = [list(item) for item in zip(*filtered)]
+    filtered = [(q_id, p_id, passage) 
+                for q_id, p_id, passage, verdict in zip(q_ids, p_ids, syn_passages, verdicts) if verdict == 1]
 
-    for i, tuple in enumerate(batch):
-        q_id, p_id, score = tuple
-        qrels[q_id] = {p_id: score, str(max_id+i): score}
-        corpus[max_id+i] = {'text': syn_passages[i], 'title': 'Synthetic agentic passage'}
+    for i, tuple in enumerate(filtered):
+        q_id, p_id, passage = tuple
+        qrels[q_id] = {p_id: 1, str(max_id+i): 1}
+        corpus[max_id+i] = {'text': passage, 'title': 'Synthetic agentic passage'}
 
     if test == True:
         break
 
-    print('Batch Complted')
+    iter_counter += 1
+    del judge_messages, verdicts, syn_passages
+    torch.cuda.empty_cache()
+    print(f"Iteration {iter_counter} of {int(total_iters)} complete")
+end = time.time()
 
+print("\n")
+print("Synthetic agentic passasges created")
+print("\n")
+print(f"Execution time: {(end-start)/60} minutes")
+print("\n")
 
 ### Writing new data ###
 # Copying queries
 original_dir = "/work/mbouthil/datasets/msmarco"
-modified_dir = original_dir + save_name
+modified_dir = f"{original_dir}_{save_name}"
 os.makedirs(modified_dir, exist_ok=True)
 os.makedirs(os.path.join(modified_dir, "qrels"), exist_ok=True)
 
@@ -221,3 +237,6 @@ with open(qrels_path, 'w') as f:
     for query_id, doc_scores in qrels.items():
         for doc_id, score in doc_scores.items():
             f.write(f"{str(query_id)}\t{str(doc_id)}\t{score}\n")
+
+
+print(f"{save_name} data creation complete")

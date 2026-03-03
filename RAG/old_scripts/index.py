@@ -16,10 +16,10 @@ import faiss
 import json
 from beir.datasets.data_loader import GenericDataLoader
 
+model_name = "r300s_synp"
 
 ### Paths and Directories ###
 corpus_path = "/work/mbouthil/datasets/msmarco/corpus.jsonl"
-model_name = "base_final"
 output_dir = "/work/mbouthil/MMATH-CM-Research-Project/RAG/retrieval_data"
 embeddings_path = f"{output_dir}/embeddings_{model_name}.npy"
 device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -48,8 +48,8 @@ passage_encoder.eval()
 
 
 ### variables ###
-N = 8_841_823                       # Amounts of passages in the original data corpus
-d = 768                             # Embedding size
+entries = 8_841_823                       # Amounts of passages in the original data corpus
+dim = 768                                 # Embedding size
 
 
 ### Creating memmap ###
@@ -57,17 +57,17 @@ embedding_memmap = np.memmap(
     embeddings_path,
     dtype='float32',
     mode='w+',
-    shape=(N, d)
+    shape=(entries, dim)
 )
 batch_size = 64
 chunksize=5000
-N = 0
 
 
 ### Writting Embeddings ###
 print('Writing index')
-total_batches=np.ceil(N/chunksize)
+total_batches=np.ceil(entries/chunksize)
 counter=0
+N = 0
 
 for chunk in stream_msmarco_chunks(corpus_path, chunksize):
 
@@ -115,12 +115,12 @@ embeddings = np.memmap(
     embeddings_path,
     dtype='float32',
     mode='r',
-    shape=(N, d)
+    shape=(entries, dim)
 )
 
 
 ### Writting index ###
-index = faiss.IndexFlatIP(d)
+index = faiss.IndexFlatIP(dim)
 chunk_size = 100_000
 
 for start_idx in range(0, N, chunk_size):

@@ -1,18 +1,14 @@
 # Training of the Dual Encoders using contrastive loss
-import pandas as pd
 import numpy as np
-import random
-import os
 import gc
 import torch
 import faiss
 import json
-import re
-import shutil
 import random
 import torch
 import time
 import sys
+import gc
 import torch.nn as nn
 from tqdm import tqdm
 from torch import Tensor
@@ -20,69 +16,41 @@ import matplotlib.pyplot as plt
 import torch.nn.functional as F
 from dotenv import load_dotenv
 from huggingface_hub import login
-from torch.utils.data import DataLoader
 from torch.cuda.amp import autocast, GradScaler
+from packages.marco_dataloader import MSMARCO
 from beir.datasets.data_loader import GenericDataLoader
-from transformers import AutoTokenizer, logging, AutoModel, AutoModelForCausalLM
-# logging.set_verbosity_error()
+from transformers import AutoTokenizer, AutoModel
 
 
+##########
 ### Parameters ###
 batch_size=256
-dual_encoder_temp=0.3
-learning_rate=1e-4
-steps=200_000
+tau=0.03
+learning_rate=2e-5
+steps=400
 plot_loss=True
+ibn=1
+K=20_000
+J=100_000
+N=502939 # length of original queries
 
 ### Dataset ###
-data_dir = "/work/mbouthil/datasets/msmarco_syn_p"
-
+data_dir = "/work/mbouthil/datasets/msmarco_neg_p_100k"
 
 ### Model Name ###
-model_name = "syn_p"
+model_name = "r400s_sqa"
+##########
 
 
-corpus, queries, qrels = GenericDataLoader(data_folder=data_dir).load(split="train")
+passages, queries, qrels = GenericDataLoader(data_folder=data_dir).load(split="train")
 device = "cuda" if torch.cuda.is_available() else "cpu"
+queries = {**dict(list(queries.items())[:K]),
+            **dict(random.sample(list(queries.items())[N:], J))}
+# queries= dict(list(queries.items())[:K])
+data = MSMARCO(queries, 
+               qrels, 
+               passages, batch_negatives=ibn)
 
-
-### Dataset ###
-class MSMARCO:
-    def __init__(self, 
-                queries:dict, 
-                passages:dict, 
-                qrels:dict, 
-                batch_size:int=256, 
-                shuffle:bool=True):
-
-        self.batch_size = batch_size
-        self.shuffle = shuffle
-        self.qrels = qrels
-        self.pids = set(passages.keys())
-        self.qids = list(queries.keys())
-        self.passages = passages
-        self.queries = queries
-
-    def fetch_batch(self):
-
-        batch = []
-        remaining_qids = self.qids.copy()
-        unavailable_pids = set()
-
-        while len(batch) < self.batch_size:
-
-            qid = remaining_qids.pop(random.randrange(len(remaining_qids)))
-            pos_pids = [k for k, v in self.qrels[qid].items() 
-                    if k not in unavailable_pids and v > 0]
-
-            if pos_pids:
-                pid = random.choice(pos_pids)
-                batch.append((self.queries[qid], self.passages[pid]['text']))
-            unavailable_pids.update(pos_pids)
-
-        return batch
-    
-Dataset = MSMARCO(queries, corpus, qrels)
 
 
 ### Tokenizer ###
@@ -137,7 +105,7 @@ model = DualEncoder(
 
 
 ### Loss Function ###
-def contrastive_loss(q_emb:Tensor, p_emb:Tensor, temperature:float=dual_encoder_temp) -> Tensor:
+def contrastive_loss(q_emb:Tensor, p_emb:Tensor, tau:float=tau) -> Tensor:
 
     '''
     This function calculates the constractive loss (Info NCE) of the query 
@@ -145,7 +113,7 @@ def contrastive_loss(q_emb:Tensor, p_emb:Tensor, temperature:float=dual_encoder_
 
         q_emb: M x N matrix
         p_emb: L x N matrix
-        temperature: float (0, 1]
+        tau: float (0, 1]
     '''
 
     M = q_emb.shape[0]                                      # Number of query rows
@@ -154,7 +122,7 @@ def contrastive_loss(q_emb:Tensor, p_emb:Tensor, temperature:float=dual_encoder_
     q_emb = F.normalize(q_emb, dim=-1)                      # Normalizing
     p_emb = F.normalize(p_emb, dim=-1)                      # Normalizing
     
-    scores = torch.matmul(q_emb, p_emb.T)/temperature       # Calculating similarity scores (cosine similarity)
+    scores = torch.matmul(q_emb, p_emb.T)/tau       # Calculating similarity scores (cosine similarity)
     labels = torch.arange(M) * int(L/M)                     # Gathering labels
     labels = labels.to(device=scores.device)
 
@@ -171,17 +139,18 @@ model.train()
 print(model_name, "training in progress...")
 for step in tqdm(range(steps), file=sys.stdout):
 
-    start = time.time()
-    batch = Dataset.fetch_batch()
+    start=time.time()
+    batch=data.fetch()
     queries, passages = zip(*batch)
+    passages=[x for sublist in passages for x in sublist]
 
-    q_inputs = query_tok(queries).to(device)
-    p_inputs = passage_tok(passages).to(device)
+    q_inputs=query_tok(queries).to(device)
+    p_inputs=passage_tok(passages).to(device)
 
     with autocast():  # fp16 training
-        q_emb = model.encode_query(**q_inputs)
-        p_emb = model.encode_passage(**p_inputs)
-        loss = contrastive_loss(q_emb, p_emb)
+        q_emb=model.encode_query(**q_inputs)
+        p_emb=model.encode_passage(**p_inputs)
+        loss=contrastive_loss(q_emb, p_emb)
 
         step_loss.append(loss.item())
         optimizer.zero_grad()
@@ -211,14 +180,16 @@ model.passage_encoder.save_pretrained(f"{save_dir}/passage_encoder_{model_name}"
 
 
 ### Cleaning Env ###
-del queries, corpus, qrels
+del queries, passages, qrels, step_loss, data
+del model, optimizer, scaler
+torch.cuda.empty_cache()
+gc.collect()
+
 
 ### Paths and Directories ###
 corpus_path = "/work/mbouthil/datasets/msmarco/corpus.jsonl"
 output_dir = "/work/mbouthil/MMATH-CM-Research-Project/RAG/retrieval_data"
 embeddings_path = f"{output_dir}/embeddings_{model_name}.npy"
-device = "cuda" if torch.cuda.is_available() else "cpu"
-
 
 
 ### Creating Vector Database ###
@@ -257,7 +228,7 @@ embedding_memmap = np.memmap(
 )
 batch_size = 64
 chunksize=5000
-N = 0
+offset = 0
 
 
 
@@ -279,18 +250,19 @@ for chunk in stream_msmarco_chunks(corpus_path, chunksize):
                 return_tensors="pt"
             ).to(device)
 
-            emb = passage_encoder(**inputs).last_hidden_state[:, 0]
+            out = passage_encoder(**inputs)
+            last_hidden_state = out.last_hidden_state
+            mask = inputs['attention_mask'].unsqueeze(-1).float()
+            emb = (last_hidden_state * mask).sum(dim=1) / mask.sum(dim=1)
+            emb = F.normalize(emb, p=2, dim=-1)
             emb = emb.float().cpu().numpy()
             emb = np.ascontiguousarray(emb, dtype=np.float32)
-
-            norms = np.linalg.norm(emb, axis=1, keepdims=True)
-            emb = emb / norms
             # faiss.normalize_L2(emb)  # Keep this one
             # index.add(emb)           # Add immediately after normalizing
 
             batch_size = emb.shape[0]
-            embedding_memmap[N:N + batch_size] = emb
-            N += batch_size
+            embedding_memmap[offset:offset + batch_size] = emb
+            offset += batch_size
 
             del inputs, emb
 
@@ -300,10 +272,15 @@ for chunk in stream_msmarco_chunks(corpus_path, chunksize):
     del chunk
     pbar.update(1)
     gc.collect()
-pbar.close
+pbar.close()
 
 embedding_memmap.flush()
-del embedding_memmap
+del passage_encoder, tokenizer, embedding_memmap
+del tokenizer
+gc.collect()
+torch.cuda.empty_cache()
+
+print('Embeddings written')
 
 
 ### Reading memmap ###
@@ -320,11 +297,10 @@ chunk_size = 100_000
 
 for start_idx in range(0, N, chunk_size):
     end_idx = min(start_idx + chunk_size, N)
-    chunk_emb = np.array(embeddings[start_idx:end_idx])
+    chunk_emb = embeddings[start_idx:end_idx]
     index.add(chunk_emb)
     del chunk_emb
     gc.collect()
-    break
 
 faiss.write_index(index, f"{output_dir}/passage_{model_name}.index")
 

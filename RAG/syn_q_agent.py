@@ -19,16 +19,14 @@ from transformers import AutoTokenizer, logging, AutoModel, AutoModelForCausalLM
 logging.set_verbosity_error()
 
 
-# Additional Synthetic Queries to be created
-file_name = 'syn_que_2'
-
+# New dataset name
+dataset_name = 'syn_q_agent_full'
+batch_size=64
+test=False
 
 # Loading Data
 data_dir = "/work/mbouthil/datasets/msmarco"
 corpus, queries, qrels = GenericDataLoader(data_folder=data_dir).load(split='train')
-
-# Creating Query Subset
-q_subset = [(keys, values) for keys, values in queries.items()]
 
 
 ### Loading LLM ###
@@ -36,11 +34,10 @@ q_subset = [(keys, values) for keys, values in queries.items()]
 load_dotenv('/work/mbouthil/MMATH-CM-Research-Project/token.env')
 token = os.getenv('HUGGINGFACE_TOKEN')
 
-# Loading model and Tokenizer
+# Loading model and model tokenizer
 model_name = "meta-llama/Llama-3.1-8B-Instruct"
 tokenizer =  AutoTokenizer.from_pretrained(model_name, token=token)
 tokenizer.pad_token = tokenizer.eos_token
-
 model = AutoModelForCausalLM.from_pretrained(
     model_name,
     dtype=torch.bfloat16,
@@ -49,29 +46,32 @@ model = AutoModelForCausalLM.from_pretrained(
 )
 
 
-### Sysyem Prompts ###
+### Agent Prompts ###
 cot_prompt='''
-You are a helpful AI assistant. You are to follow the following instructions:
+You are a helpful AI assistant. 
 
-You will be given a query. Your task is to think about how you would produce a new query asking the same underlying question.
+You will be given a query. Your task is to provide your thoughts regarding how you would rewrite this query, in the same style, and asking the same underlying question.
 
 Proivide your thoughts:
 '''
 
 creation_prompt=f'''
-You are a helpful AI assistant. Your task is to create a new question from the provided query, asking the same underlying infromation. 
+You are a helpful AI assistant. 
 
-Provide only your new question.  
+Your task is to create a new query from the provided one. Your new rewritten query must ask the same underlying question, and attempt to match the way the question (query) is posed. 
 
-Moreover, consider the following:
+Provude only the new query and format it as follows: **new_query**
+
+The following contains thoughts regarding how to rewrite the query. Use these thoughts to guide your creation of a new query.
+\n
 '''
 
 judge_prompt='''
 You are a helpful AI assistant. 
 
-Your task is to judge whether both provided queries pose the same underlying question. 
+Your task is to judge whether both provided queries pose the same underlying question, and are posed similarly. 
 
-Ensure that your answer contains TRUE or FALSE. 
+If both queries satisfies the above, ensure your response contains "TRUE", else ensure your response contains "FALSE".
 '''
 
 ### LLM function ###
@@ -115,27 +115,25 @@ def llm_pass(
 
 
 ### Creating Batches ###
-def batch_splits(queries:list,
-                batch_size:int=64
-) -> list[tuple[str,str]]:
-
+def batch_splits(queries:list[tuple], batch_size:int=64) -> list[tuple]:
     for i in range(0, len(queries), batch_size):
         yield queries[i:i + batch_size]
 
-batches = batch_splits(q_subset)
-
 
 ### Creating new queries ###
-max_id = int(max([int(key) for key in queries.keys()]))
-global_counter = max_id + 1 
+query_list = [(keys, values) for keys, values in queries.items()]
+batches = batch_splits(query_list, batch_size=batch_size)
+N = len(query_list)
+total_batches = np.ceil(N/batch_size)
+batch_counter = 0
 
-
+print("Creating synthetic queries...")
 for batch in batches:
 
     ids, old_queries = zip(*batch)
     N = len(old_queries)
 
-    # Step 1
+    # LLM Agent #1 - CoT
     cot_messages = [
         [
             {"role": "system", "content": cot_prompt},
@@ -145,8 +143,9 @@ for batch in batches:
     ]
     cot_responses = llm_pass(cot_messages)
     cot_responses = [response[11:] for response in cot_responses]
+    del cot_messages
 
-    # Step 2
+    # LLM Agent #2 - New Query Creation
     creation_messages = [
         [
             {"role": "system", "content": creation_prompt + cot_responses[i]},
@@ -155,38 +154,52 @@ for batch in batches:
         for i, query in enumerate(old_queries)
     ]
     syn_queries = llm_pass(creation_messages)
-    syn_queries = [query[11:] for query in syn_queries]
+    del cot_responses, creation_messages
+    
+    syn_queries = [
+        re.findall(r'\*\*([^*]+)\*\*', syn_query)[0] 
+        if len(re.findall(r'\*\*([^*]+)\*\*', syn_query)) != 0 
+        else syn_query
+        for syn_query in syn_queries
+        ]
 
-    # Step 3
+    # LLM Agent #3 - Judge
     judge_messages = [
         [
             {"role": "system", "content": judge_prompt},
             {"role": "user", "content": 
-             str('"' + old_queries[i] + '"\n\nand \n' + syn_queries[i])
+             str('"' + old_queries[i] + '"\n\nand \n' + syn_query)
              }
         ]
-        for i in range(N)
+        for i, syn_query in enumerate(syn_queries)
     ]
     verdicts = llm_pass(judge_messages)
     verdicts = [1 if 'TRUE' in answer else 0 for answer in verdicts]
 
-    filtered = [(id, query) for id, query, verdict in zip(ids, syn_queries, verdicts) if verdict == 1]
-    ids, syn_queries = [list(item) for item in zip(*filtered)]
+    # Filtering by verdict
+    filtered = [(id, syn_query) for id, syn_query, verdict in zip(ids, syn_queries, verdicts) if verdict == 1]
+    max_id = max([int(key) for key in queries.keys()]) +1
 
-    for i, id in enumerate(ids):
-        new_id = global_counter
+    # Extending dataset
+    for i, tuple in enumerate(filtered):
+        id, syn_query = tuple
+        new_id = max_id + i
         qrels[new_id] = qrels[id]
-        queries[new_id] = syn_queries[i]
-        global_counter += 1
+        queries[new_id] = syn_query
 
-    print('Batch Complted')
+    batch_counter += 1
+    del judge_messages, verdicts, syn_queries
+    torch.cuda.empty_cache()
+    print('f{batch_counter} of {total_batches} batches complete')
+    if test == True:
+        break
 
 
 
 ### Saving new dataset ###
 # Creating directories
 original_dir = "/work/mbouthil/datasets/msmarco"
-modified_dir = original_dir + "_" + file_name
+modified_dir = original_dir + "_" + dataset_name
 os.makedirs(modified_dir, exist_ok=True)
 os.makedirs(os.path.join(modified_dir, "qrels"), exist_ok=True)
 

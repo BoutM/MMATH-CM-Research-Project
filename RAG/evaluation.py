@@ -1,7 +1,7 @@
-# Importing packages
 import pandas as pd
 import torch
 import os
+import gc
 import math
 os.environ["HF_HUB_DISABLE_PROGREvSS_BARS"] = "1"
 from huggingface_hub import login
@@ -18,18 +18,47 @@ from beir.datasets.data_loader import GenericDataLoader
 import torch.nn.functional as F
 from beir.retrieval.evaluation import EvaluateRetrieval
 
-### Model Name ###
-model_name = "syn_que_final"
+
+model_name = "r400s_sqa"
+
+try:
+    index = faiss.read_index(f"/work/mbouthil/MMATH-CM-Research-Project/RAG/retrieval_data/{model_name}.index")
+except:
+    embeddings_path = f"/work/mbouthil/MMATH-CM-Research-Project/RAG/retrieval_data/embeddings_{model_name}.npy"
+    N = 8_841_823                     
+    d = 768  
+
+    ### Reading memmap ###
+    embeddings = np.memmap(
+        embeddings_path,
+        dtype='float32',
+        mode='r',
+        shape=(N, d)
+    )
+
+    ### Writting index ###
+    index = faiss.IndexFlatIP(d)
+    chunk_size = 100_000
+
+    for start_idx in range(0, N, chunk_size):
+        end_idx = min(start_idx + chunk_size, N)
+        chunk_emb = embeddings[start_idx:end_idx]
+        index.add(chunk_emb)
+        del chunk_emb
+        gc.collect()
+
+    faiss.write_index(index, f"/work/mbouthil/MMATH-CM-Research-Project/RAG/retrieval_data/{model_name}.index")
+    del embeddings, index
+    gc.collect
+
+    # Loading Index
+    index = faiss.read_index(f"/work/mbouthil/MMATH-CM-Research-Project/RAG/retrieval_data/{model_name}.index")
 
 
-### Loading Data ###
-data_dir = "/work/mbouthil/datasets/msmarco"
-corpus, dev_queries, dev_qrels = GenericDataLoader(data_folder=data_dir).load(split="dev")
+### Loading Eval Data ###
+corpus, dev_queries, dev_qrels = GenericDataLoader(data_folder="/work/mbouthil/datasets/msmarco").load(split="dev")
+del corpus
 dev_info = [(key, value) for key, value in dev_queries.items()]
-
-# Loading Index
-index = faiss.read_index(f"/work/mbouthil/MMATH-CM-Research-Project/RAG/retrieval_data/passage_{model_name}.index")
-print(index.ntotal)
 
 # Loading Query Encoder
 device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -42,7 +71,6 @@ query_encoder.eval()
 def encode_query(query:str) -> Tensor:
 
     queries = [query] if isinstance(query, str) else query
-    embeddings = []
 
     with torch.no_grad():
         inputs = tokenizer(
@@ -54,15 +82,13 @@ def encode_query(query:str) -> Tensor:
         ).to(device)
 
     # Mean Pooling
-    out = query_encoder(**inputs)
-    last_hidden_state = out.last_hidden_state
-    mask = inputs['attention_mask'].unsqueeze(-1).float()
-    emb = (last_hidden_state * mask).sum(dim=1) / mask.sum(dim=1)
+        out = query_encoder(**inputs)
+        last_hidden_state = out.last_hidden_state
+        mask = inputs['attention_mask'].unsqueeze(-1).float()
+        emb = (last_hidden_state * mask).sum(dim=1) / mask.sum(dim=1)
+        emb = F.normalize(emb, p=2, dim=-1)
 
-    emb = F.normalize(emb, p=2, dim=-1)
-    embeddings.append(emb.cpu())
-
-    return torch.cat(embeddings, 0)
+    return emb.cpu()
 
 
 def batch_splits(item:list, batch_size:int=64):
@@ -79,7 +105,7 @@ for batch in batches:
     q_ids, queries = zip(*batch)
     N = range(len(q_ids))
     
-    q_emb = encode_query(queries).detach().cpu().numpy()
+    q_emb = encode_query(queries).numpy()
     scores, pids = index.search(q_emb, 100)
     
     pids = [[str(pid) for pid in pids[i]] for i in N]
@@ -110,7 +136,17 @@ mrr = EvaluateRetrieval.evaluate_custom(
 print("\n")
 print(f"NDCG@10: {ndcg['NDCG@10']}")
 print("\n")
+print(f"MRR@10: {mrr['MRR@10']}") 
+print("\n")
 print(f"Recall@100: {recall['Recall@100']}")
 print("\n")
-print(f"MRR@10: {mrr['MRR@10']}") 
+print(f"Recall@1000: {recall['Recall@1000']}")
 
+scores = {
+    "NDCG@10": ndcg['NDCG@10'],
+    "MRR@10": mrr['MRR@10'],
+    "Recall@100": recall['Recall@100'],
+    "Recall@1000": recall['Recall@1000']}
+
+scores = pd.DataFrame(scores, index=[0])
+scores.to_csv(f"/work/mbouthil/MMATH-CM-Research-Project/RAG/results/{model_name}_results.csv", index=False)
