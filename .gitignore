@@ -26,7 +26,8 @@ RAG/query_data/
 *.ckpt
 
 # Model Folder
-RAG/model_weights/
+retreiver_training/model_weights/
+retreiver_training/retrieval_data/
 
 # Hugging Face Login Token:
 token.env
