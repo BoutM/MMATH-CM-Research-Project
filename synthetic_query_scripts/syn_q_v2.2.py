@@ -18,7 +18,7 @@ sys.path.append('/mnt/hpc/work/mbouthil/MMATH-CM-Research-Project')
 from packages.marco_dataloader import MSMARCO
 
 test=False
-save_name='syn_q_v2'
+save_name='syn_q_v2.2'
 
 ### Loading data ###
 data_dir = "/work/mbouthil/datasets/msmarco"
@@ -34,17 +34,9 @@ system_prompt = '''You are a subject matter expert in your field with substantia
 specific subject or topic, validated by academic degrees, certifications, and/or years of
 professional experience in that field.
 
-Write a question that elaborates on the provided passage(s). Ensure that your question is answered by the passage(s). 
+Write a question that is answered by the provided passage(s). Ensure that your question is concise and answered by the passage(s). 
 Provide only the question and format it as follows:**question**. 
-''' # Prompt method 1
-
-# system_prompt = '''You are a subject matter expert in your field with substantial accumulated knowledge in a
-# specific subject or topic, validated by academic degrees, certifications, and/or years of
-# professional experience in that field.
-
-# Write a question that is answered by the provided passage(s). Ensure that your question is concise and answered by the passage(s). 
-# Provide only the question and format it as follows:**question**. 
-# '''
+''' # Prompting Method 2
 
 # Loading LM
 from packages.llama import Llama_LM

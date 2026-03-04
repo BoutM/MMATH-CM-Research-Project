@@ -17,9 +17,10 @@ import torch.nn.functional as F
 from dotenv import load_dotenv
 from huggingface_hub import login
 from torch.cuda.amp import autocast, GradScaler
-from packages.marco_dataloader import MSMARCO
 from beir.datasets.data_loader import GenericDataLoader
 from transformers import AutoTokenizer, AutoModel
+sys.path.append('/mnt/hpc/work/mbouthil/MMATH-CM-Research-Project')
+from packages.marco_dataloader import MSMARCO
 
 
 ##########
@@ -29,24 +30,26 @@ tau=0.03
 learning_rate=2e-5
 steps=400
 plot_loss=True
-ibn=1
+ibn=0
 K=20_000
 J=100_000
 N=502939 # length of original queries
 
 ### Dataset ###
-data_dir = "/work/mbouthil/datasets/msmarco_neg_p_100k"
+dataset_dir = "/work/mbouthil/datasets/msmarco_syn_q_v2.2"
 
 ### Model Name ###
-model_name = "r400s_sqa"
+model_name = "r400s_sq2.2"
 ##########
 
 
-passages, queries, qrels = GenericDataLoader(data_folder=data_dir).load(split="train")
+passages, queries, qrels = GenericDataLoader(data_folder=dataset_dir).load(split="train")
+
 device = "cuda" if torch.cuda.is_available() else "cpu"
-queries = {**dict(list(queries.items())[:K]),
-            **dict(random.sample(list(queries.items())[N:], J))}
-# queries= dict(list(queries.items())[:K])
+# queries = {**dict(list(queries.items())[:K]),
+#             **dict(random.sample(list(queries.items())[N:], J))}
+queries= dict(list(queries.items())[:K])
+
 data = MSMARCO(queries, 
                qrels, 
                passages, batch_negatives=ibn)
@@ -174,7 +177,7 @@ if plot_loss==True:
 
 
 ### Saving Encoder Weights ###
-save_dir = "/work/mbouthil/MMATH-CM-Research-Project/RAG/model_weights"
+save_dir = "/work/mbouthil/MMATH-CM-Research-Project/retreiver_training/model_weights"
 model.query_encoder.save_pretrained(f"{save_dir}/query_encoder_{model_name}")
 model.passage_encoder.save_pretrained(f"{save_dir}/passage_encoder_{model_name}")
 
@@ -188,7 +191,7 @@ gc.collect()
 
 ### Paths and Directories ###
 corpus_path = "/work/mbouthil/datasets/msmarco/corpus.jsonl"
-output_dir = "/work/mbouthil/MMATH-CM-Research-Project/RAG/retrieval_data"
+output_dir = "/work/mbouthil/MMATH-CM-Research-Project/retreiver_training/retrieval_data"
 embeddings_path = f"{output_dir}/embeddings_{model_name}.npy"
 
 
@@ -209,7 +212,7 @@ def stream_msmarco_chunks(path, chunk_size=5000):
 ### Loading Passage Encoder ###
 tokenizer = AutoTokenizer.from_pretrained('bert-base-uncased')
 passage_encoder = AutoModel.from_pretrained(
-    f"/work/mbouthil/MMATH-CM-Research-Project/RAG/model_weights/passage_encoder_{model_name}"
+    f"/work/mbouthil/MMATH-CM-Research-Project/retreiver_training/model_weights/passage_encoder_{model_name}"
     ).to(device)
 passage_encoder.eval()
 

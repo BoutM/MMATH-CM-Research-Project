@@ -2,29 +2,27 @@ import pandas as pd
 import torch
 import os
 import gc
-import math
 os.environ["HF_HUB_DISABLE_PROGREvSS_BARS"] = "1"
 from huggingface_hub import login
-from transformers import AutoTokenizer, AutoModelForCausalLM, logging, AutoModel
+from transformers import AutoTokenizer, logging, AutoModel
 logging.set_verbosity_error()
 import numpy as np
-from concurrent.futures import ThreadPoolExecutor
 from dotenv import load_dotenv
 import os
 from torch import Tensor
 import faiss 
-import json
 from beir.datasets.data_loader import GenericDataLoader
 import torch.nn.functional as F
 from beir.retrieval.evaluation import EvaluateRetrieval
 
 
-model_name = "r400s_sqa"
+model_name = "r400s_sq2"
+dir= "/work/mbouthil/MMATH-CM-Research-Project/retreiver_training/retrieval_data/"
 
 try:
-    index = faiss.read_index(f"/work/mbouthil/MMATH-CM-Research-Project/RAG/retrieval_data/{model_name}.index")
+    index = faiss.read_index(f"{dir}{model_name}.index")
 except:
-    embeddings_path = f"/work/mbouthil/MMATH-CM-Research-Project/RAG/retrieval_data/embeddings_{model_name}.npy"
+    embeddings_path = f"{dir}embeddings_{model_name}.npy"
     N = 8_841_823                     
     d = 768  
 
@@ -47,12 +45,12 @@ except:
         del chunk_emb
         gc.collect()
 
-    faiss.write_index(index, f"/work/mbouthil/MMATH-CM-Research-Project/RAG/retrieval_data/{model_name}.index")
+    faiss.write_index(index, f"{dir}{model_name}.index")
     del embeddings, index
     gc.collect
 
     # Loading Index
-    index = faiss.read_index(f"/work/mbouthil/MMATH-CM-Research-Project/RAG/retrieval_data/{model_name}.index")
+    index = faiss.read_index(f"{dir}{model_name}.index")
 
 
 ### Loading Eval Data ###
@@ -64,7 +62,7 @@ dev_info = [(key, value) for key, value in dev_queries.items()]
 device = "cuda" if torch.cuda.is_available() else "cpu"
 tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
 query_encoder = AutoModel.from_pretrained(
-    f"/work/mbouthil/MMATH-CM-Research-Project/RAG/model_weights/query_encoder_{model_name}"
+    f"/work/mbouthil/MMATH-CM-Research-Project/retreiver_training/model_weights/query_encoder_{model_name}"
 ).to(device)
 query_encoder.eval()
 
@@ -149,4 +147,4 @@ scores = {
     "Recall@1000": recall['Recall@1000']}
 
 scores = pd.DataFrame(scores, index=[0])
-scores.to_csv(f"/work/mbouthil/MMATH-CM-Research-Project/RAG/results/{model_name}_results.csv", index=False)
+scores.to_csv(f"/work/mbouthil/MMATH-CM-Research-Project/results/{model_name}_results.csv", index=False)

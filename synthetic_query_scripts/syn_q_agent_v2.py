@@ -4,6 +4,7 @@ import random
 import torch
 import os
 import gc
+import sys
 import shutil
 import torch.nn as nn
 from tqdm import tqdm
@@ -13,9 +14,10 @@ import torch.nn.functional as F
 from dotenv import load_dotenv
 from huggingface_hub import login
 from torch.cuda.amp import autocast, GradScaler
-from packages.marco_dataloader import MSMARCO
 from beir.datasets.data_loader import GenericDataLoader
 from transformers import AutoTokenizer, AutoModel
+sys.path.append('/mnt/hpc/work/mbouthil/MMATH-CM-Research-Project')
+from packages.marco_dataloader import MSMARCO
 
 save_name='syn_q_agent_2'
 test=False
@@ -79,8 +81,8 @@ batches = batch_splits(qrels, batch_size=64)
 
 syn_dict=dict()
 new_qrels=dict()
+qrels=dict(qrels)
 counter=0
-
 
 for batch in batches:
     q_ids, p_data = zip(*batch)
@@ -134,8 +136,7 @@ for batch in batches:
 
     filtered = [(q_id, syn_query) for q_id, syn_query, verdict in zip(q_ids, syn_queries, verdicts) if verdict == 1]
 
-    for tuple in enumerate(filtered):
-        q_id, syn_query = tuple
+    for q_id, syn_query  in filtered:
         syn_dict[q_id] = syn_query
         new_qrels[q_id] = qrels[q_id]
 
