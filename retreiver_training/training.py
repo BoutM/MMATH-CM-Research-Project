@@ -30,16 +30,16 @@ tau=0.03
 learning_rate=2e-5
 steps=400
 plot_loss=True
-ibn=0
-K=20_000
-J=100_000
-N=502939 # length of original queries
+
+
+ibn=1
+K=100_000
 
 ### Dataset ###
-dataset_dir = "/work/mbouthil/datasets/msmarco_syn_q_v2.2"
+dataset_dir = "/work/mbouthil/datasets/msmarco_syn_q_agent_3-"
 
 ### Model Name ###
-model_name = "r400s_sq2.2"
+model_name = "r400s_sqa3-"
 ##########
 
 
@@ -139,7 +139,7 @@ scaler = GradScaler()
 step_loss = []
 model.train()
 
-print(model_name, "training in progress...")
+print(f"{model_name} training in progress...")
 for step in tqdm(range(steps), file=sys.stdout):
 
     start=time.time()
@@ -173,7 +173,7 @@ if plot_loss==True:
     plt.xlabel("Step")
     plt.legend()
     plt.style.use('bmh')
-    plt.savefig(f"/work/mbouthil/MMATH-CM-Research-Project/RAG/figures/loss_curve_{model_name}.png", dpi=300)
+    plt.savefig(f"/work/mbouthil/MMATH-CM-Research-Project/figures/loss_curve_{model_name}.png", dpi=300)
 
 
 ### Saving Encoder Weights ###
@@ -236,7 +236,7 @@ offset = 0
 
 
 ### Writting Embeddings ###
-print('Writing index')
+print('Writing Embeddings')
 pbar=tqdm(total=np.ceil(N/chunksize), file=sys.stdout)
 for chunk in stream_msmarco_chunks(corpus_path, chunksize):
 
@@ -276,14 +276,12 @@ for chunk in stream_msmarco_chunks(corpus_path, chunksize):
     pbar.update(1)
     gc.collect()
 pbar.close()
+print('Embeddings written')
 
 embedding_memmap.flush()
 del passage_encoder, tokenizer, embedding_memmap
-del tokenizer
 gc.collect()
 torch.cuda.empty_cache()
-
-print('Embeddings written')
 
 
 ### Reading memmap ###
@@ -295,6 +293,7 @@ embeddings = np.memmap(
 )
 
 ### Writting index ###
+print("writting index")
 index = faiss.IndexFlatIP(d)
 chunk_size = 100_000
 

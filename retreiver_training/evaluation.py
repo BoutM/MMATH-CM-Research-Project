@@ -8,7 +8,6 @@ from transformers import AutoTokenizer, logging, AutoModel
 logging.set_verbosity_error()
 import numpy as np
 from dotenv import load_dotenv
-import os
 from torch import Tensor
 import faiss 
 from beir.datasets.data_loader import GenericDataLoader
@@ -16,12 +15,14 @@ import torch.nn.functional as F
 from beir.retrieval.evaluation import EvaluateRetrieval
 
 
-model_name = "r400s_sq2"
+model_name = "r400s_sqa2"
 dir= "/work/mbouthil/MMATH-CM-Research-Project/retreiver_training/retrieval_data/"
 
 try:
     index = faiss.read_index(f"{dir}{model_name}.index")
+    print('Index available')
 except:
+    print('Index unavailable: creating embeddings')
     embeddings_path = f"{dir}embeddings_{model_name}.npy"
     N = 8_841_823                     
     d = 768  
@@ -34,6 +35,7 @@ except:
         shape=(N, d)
     )
 
+    print("Writting embeddings")
     ### Writting index ###
     index = faiss.IndexFlatIP(d)
     chunk_size = 100_000
@@ -47,16 +49,16 @@ except:
 
     faiss.write_index(index, f"{dir}{model_name}.index")
     del embeddings, index
-    gc.collect
+    gc.collect()
 
     # Loading Index
     index = faiss.read_index(f"{dir}{model_name}.index")
 
 
+print('Evaluation in progress...')
 ### Loading Eval Data ###
-corpus, dev_queries, dev_qrels = GenericDataLoader(data_folder="/work/mbouthil/datasets/msmarco").load(split="dev")
-del corpus
-dev_info = [(key, value) for key, value in dev_queries.items()]
+_, dev_queries, dev_qrels = GenericDataLoader(data_folder="/work/mbouthil/datasets/msmarco").load(split="dev")
+dev_info = list(dev_queries.items())
 
 # Loading Query Encoder
 device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -104,7 +106,7 @@ for batch in batches:
     N = range(len(q_ids))
     
     q_emb = encode_query(queries).numpy()
-    scores, pids = index.search(q_emb, 100)
+    scores, pids = index.search(q_emb, 1000)
     
     pids = [[str(pid) for pid in pids[i]] for i in N]
     scores = [[float(score) for score in scores[i]] for i in N]
@@ -132,13 +134,8 @@ mrr = EvaluateRetrieval.evaluate_custom(
 
 
 print("\n")
-print(f"NDCG@10: {ndcg['NDCG@10']}")
+print(f"NDCG@10: {ndcg['NDCG@10']}\nMRR@10: {mrr['MRR@10']}\nRecall@100: {recall['Recall@100']}\nRecall@1000: {recall['Recall@1000']}")
 print("\n")
-print(f"MRR@10: {mrr['MRR@10']}") 
-print("\n")
-print(f"Recall@100: {recall['Recall@100']}")
-print("\n")
-print(f"Recall@1000: {recall['Recall@1000']}")
 
 scores = {
     "NDCG@10": ndcg['NDCG@10'],
@@ -148,3 +145,5 @@ scores = {
 
 scores = pd.DataFrame(scores, index=[0])
 scores.to_csv(f"/work/mbouthil/MMATH-CM-Research-Project/results/{model_name}_results.csv", index=False)
+
+print("Evaluation Complete")
