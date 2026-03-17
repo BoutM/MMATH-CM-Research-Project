@@ -11,8 +11,7 @@ from torch import Tensor
 from dotenv import load_dotenv
 from huggingface_hub import login
 import torch.nn.functional as F
-os.environ["HF_HUB_DISABLE_PROGREvSS_BARS"] = "1"
-from transformers import AutoTokenizer, logging, AutoModel
+os.environ["HF_HUB_DISABLE_PROGRESS_BARS"] = "1"
 from transformers import AutoTokenizer, logging, AutoModel
 from beir.datasets.data_loader import GenericDataLoader
 from beir.retrieval.evaluation import EvaluateRetrieval
@@ -98,9 +97,8 @@ if write_embeddings==True:
                 # faiss.normalize_L2(emb)  # Keep this one
                 # index.add(emb)           # Add immediately after normalizing
 
-                batch_size = emb.shape[0]
-                embedding_memmap[offset:offset + batch_size] = emb
-                offset += batch_size
+                embedding_memmap[offset:offset + emb.shape[0]] = emb
+                offset += emb.shape[0]
 
                 del inputs, emb
 
@@ -111,6 +109,7 @@ if write_embeddings==True:
         pbar.update(1)
         gc.collect()
     pbar.close()
+    print('Embeddings written')
 
     embedding_memmap.flush()
     del passage_encoder, tokenizer, embedding_memmap
@@ -140,6 +139,6 @@ for start_idx in range(0, N, chunk_size):
     del chunk_emb
     gc.collect()
 
-faiss.write_index(index, f"{output_dir}/passage_{model_name}.index")
+faiss.write_index(index, f"{output_dir}/{model_name}.index")
 
 print("Index written")

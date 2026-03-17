@@ -19,8 +19,11 @@ from packages.llama import Llama_LM
 # This script adds negative passages to the desired dataset
 
 K=100_000
-old_dataset_name = 'syn_q_fs_agent'
-new_dataset_name = old_dataset_name+'-'
+neg_passages=2
+test=True
+
+old_dataset_name = 'syn_q_v2'
+new_dataset_name = old_dataset_name+'-'+str(neg_passages)
 
 # Loading Data
 data_dir = f"/work/mbouthil/datasets/msmarco_{old_dataset_name}"
@@ -33,14 +36,12 @@ llama = Llama_LM()
 
 
 ### System instruction prompt ###
-system_prompt='''
+system_prompt=f'''
 You are a helful AI assistant. You are to follow the following instructions:
 
-You will be given a question. Your task is to write a passage that does not answer the question. 
+You will be given a question. Your task is to write {neg_passages} new passages that do not answer the question but contain words and explore themes that are related to the question. 
 
-Provide only the new passage and format it as follows:
-
-**new passage**
+Provide only the new passages and wrap the new passages, and seperate them using \n\n
 '''
 
 
@@ -52,7 +53,7 @@ def batch_splits(item:list, batch_size:int=64):
 batches = batch_splits(list(queries.items()))
 
 # Creating Hard Negatives
-max_id = max([int(key) for key in corpus.keys()]) +1 
+new_pid = max([int(key) for key in corpus.keys()]) +1 
 for batch in batches:
 
     q_ids, q_text = zip(*batch)
@@ -63,17 +64,19 @@ for batch in batches:
         ]
         for query in q_text
     ]
-    new_passages = llama.prompt(messages)
+    new_passages = llama.prompt(messages, da_wrap=False)
+    for i, new_passage in enumerate(new_passages):
+        new_passages[i] = [part for part in new_passage.split('\n\n')]
 
     for i, q_id in enumerate(q_ids):
-        new_pid = max_id + i
-        qrels[q_id] = {**qrels[q_id], 
+        for new_passage in enumerate(new_passages[i]):
+            qrels[q_id] = {**qrels[q_id], 
                        **{str(new_pid): -1}}
-        corpus[str(new_pid)] = {'text': new_passages[i], 'title': 'Negative synthetic passage'}
+            corpus[str(new_pid)] = {'text': new_passage, 'title': 'Negative synthetic passage'}
+            new_pid += 1
 
-    max_id += len(batch)
-
-
+    if test==True:
+        break
 
 ### Saving new dataset ###
 # Creating directories

@@ -36,10 +36,10 @@ ibn=1
 K=100_000
 
 ### Dataset ###
-dataset_dir = "/work/mbouthil/datasets/msmarco_syn_q_agent_3-"
+dataset_dir = "/work/mbouthil/datasets/msmarco_syn_q_v2-v3"
 
 ### Model Name ###
-model_name = "r400s_sqa3-"
+model_name = "r400s_sq2-v3"
 ##########
 
 
@@ -166,13 +166,13 @@ print('Training complete')
 
 ### Plotting Loss ###
 if plot_loss==True:
+    plt.style.use('bmh')
     plt.figure(figsize=(12, 12))
     plt.suptitle("Bi-Encoder Training Loss")
     plt.plot(range(1, len(step_loss)+1), step_loss, label="Training Loss", linestyle="-")
     plt.ylabel("Loss")
     plt.xlabel("Step")
     plt.legend()
-    plt.style.use('bmh')
     plt.savefig(f"/work/mbouthil/MMATH-CM-Research-Project/figures/loss_curve_{model_name}.png", dpi=300)
 
 

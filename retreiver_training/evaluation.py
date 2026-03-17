@@ -15,14 +15,14 @@ import torch.nn.functional as F
 from beir.retrieval.evaluation import EvaluateRetrieval
 
 
-model_name = "r400s_sqa2"
+model_name = "r400s_sq2-v3"
 dir= "/work/mbouthil/MMATH-CM-Research-Project/retreiver_training/retrieval_data/"
 
 try:
     index = faiss.read_index(f"{dir}{model_name}.index")
     print('Index available')
 except:
-    print('Index unavailable: creating embeddings')
+    print('Index unavailable: reading embeddings')
     embeddings_path = f"{dir}embeddings_{model_name}.npy"
     N = 8_841_823                     
     d = 768  

@@ -17,15 +17,16 @@ from packages.llama import Llama_LM
 
 
 # This script adds negative passages to the desired dataset
-
 K=100_000
-old_dataset_name = 'syn_q_fs_agent'
-new_dataset_name = old_dataset_name+'-'
+test=False
+old_dataset_name = 'syn_q_v2'
+new_dataset_name = old_dataset_name+'-v2'
 
 # Loading Data
 data_dir = f"/work/mbouthil/datasets/msmarco_{old_dataset_name}"
 corpus, queries, qrels = GenericDataLoader(data_folder=data_dir).load(split="train")
-queries = dict(list(queries.items())[:K])
+print(len(qrels))
+qrels = list(qrels.items())[:K]
 
 
 # Loading LM
@@ -36,7 +37,8 @@ llama = Llama_LM()
 system_prompt='''
 You are a helful AI assistant. You are to follow the following instructions:
 
-You will be given a question. Your task is to write a passage that does not answer the question. 
+You will be given a question and passage(s). Your task is to write a new passage that does not answer the question.
+However, this new passage that you will create is to use be related to the themes of the question and passage(s). 
 
 Provide only the new passage and format it as follows:
 
@@ -49,19 +51,35 @@ def batch_splits(item:list, batch_size:int=64):
     for i in range(0, len(item), batch_size):
         yield item[i:i + batch_size]
 
-batches = batch_splits(list(queries.items()))
+batches = batch_splits(qrels)
+qrels=dict(qrels)
 
 # Creating Hard Negatives
 max_id = max([int(key) for key in corpus.keys()]) +1 
 for batch in batches:
 
-    q_ids, q_text = zip(*batch)
+    q_ids, p_data = zip(*batch)
+    questions = [queries[q_id] for q_id in q_ids]
+
+    passages = []
+    for entry in p_data:
+        p_ids = list(entry.keys())
+        p_ids = [key for key, value in entry.items() if value > 0]
+        if len(p_ids) > 1:
+            p_texts = []
+            for i, p_id in enumerate(p_ids):
+                p_texts.append(f"passage {i+1}: {corpus[p_id]['text']}")
+            passages.append("\n".join(p_texts))
+
+        else:
+            passages.append(corpus[p_ids[0]]['text'])
+
     messages = [
         [
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": f"Question: {query}"}
+            {"role": "user", "content": f"Question: {question}\nPassage(s):\n{passages[i]}"}
         ]
-        for query in q_text
+        for i, question in enumerate(questions)
     ]
     new_passages = llama.prompt(messages)
 
@@ -72,8 +90,8 @@ for batch in batches:
         corpus[str(new_pid)] = {'text': new_passages[i], 'title': 'Negative synthetic passage'}
 
     max_id += len(batch)
-
-
+    if test==True:
+        break
 
 ### Saving new dataset ###
 # Creating directories
