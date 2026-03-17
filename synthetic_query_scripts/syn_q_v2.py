@@ -1,33 +1,28 @@
 import pandas as pd
 import numpy as np
-import random
 import sys
 import os
 import json
 import shutil
-import random
-from tqdm import tqdm
-from torch import Tensor
 from dotenv import load_dotenv
 from huggingface_hub import login
-from torch.utils.data import DataLoader
 from beir.datasets.data_loader import GenericDataLoader
-from transformers import AutoTokenizer, logging, AutoModel, AutoModelForCausalLM
+from transformers import logging
 logging.set_verbosity_error()
 sys.path.append('/mnt/hpc/work/mbouthil/MMATH-CM-Research-Project')
-from packages.marco_dataloader import MSMARCO
+from packages.llama import Llama_LM
 
-test=False
-save_name='syn_q_v2'
+
+'''
+This script creates 100,000 zero shot synthetic queries based on the corresponding qrels passages. 
+'''
+
 
 ### Loading data ###
+save_name='syn_q_v2'
 data_dir = "/work/mbouthil/datasets/msmarco"
 corpus, _, qrels = GenericDataLoader(data_folder=data_dir).load(split="train")
-
-
-random.seed(42)
-J=100_000
-qrels = list(qrels.items())[:J]
+qrels = list(qrels.items())[:100_000]
 
 
 system_prompt = '''You are a subject matter expert in your field with substantial accumulated knowledge in a
@@ -36,18 +31,10 @@ professional experience in that field.
 
 Write a question that elaborates on the provided passage(s). Ensure that your question is answered by the passage(s). 
 Provide only the question and format it as follows:**question**. 
-''' # Prompt method 1
+''' 
 
-# system_prompt = '''You are a subject matter expert in your field with substantial accumulated knowledge in a
-# specific subject or topic, validated by academic degrees, certifications, and/or years of
-# professional experience in that field.
-
-# Write a question that is answered by the provided passage(s). Ensure that your question is concise and answered by the passage(s). 
-# Provide only the question and format it as follows:**question**. 
-# '''
 
 # Loading LM
-from packages.llama import Llama_LM
 llama = Llama_LM()
 
 def batch_splits(item:list, batch_size:int=64):
@@ -92,37 +79,26 @@ for batch in batches:
     for i, q_id in enumerate(q_ids):
         syn_dict[q_id] = syn_queries[i]
 
-    if test == True:
-        break
-
-qrels = dict(qrels)
-
 
 ### Saving new dataset ###
-# Creating directories
 original_dir = "/work/mbouthil/datasets/msmarco"
 modified_dir = original_dir + "_" + save_name
 os.makedirs(modified_dir, exist_ok=True)
 os.makedirs(os.path.join(modified_dir, "qrels"), exist_ok=True)
 
-
-# Copying old Corpus 
-shutil.copy(
+shutil.copy(                                                        # Copying old Corpus 
     f"{original_dir}/corpus.jsonl", 
     f"{modified_dir}/corpus.jsonl"
 )
 
-
-# Saving synthetic queries
-queries_path = os.path.join(modified_dir, "queries.jsonl")
+queries_path = os.path.join(modified_dir, "queries.jsonl")          # Saving synthetic queries
 with open(queries_path, 'w') as f:
     for query_id, query_text in syn_dict.items():
         entry = {"_id": str(query_id), "text": query_text}
         f.write(json.dumps(entry) + '\n')
 
-
-# Saving qrels
-qrels_path = os.path.join(modified_dir, "qrels", "train.tsv")
+qrels = dict(qrels)
+qrels_path = os.path.join(modified_dir, "qrels", "train.tsv")       # Saving qrels
 with open(qrels_path, 'w') as f:
     f.write("query-id\tcorpus-id\tscore\n")
     for query_id, doc_scores in qrels.items():

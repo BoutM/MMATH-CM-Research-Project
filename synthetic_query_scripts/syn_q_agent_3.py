@@ -1,44 +1,29 @@
-# Training of the Dual Encoders using contrastive loss
-import json
 import random
-import torch
 import os
-import gc
-import sys
+import json
 import shutil
-import torch.nn as nn
-from tqdm import tqdm
-from torch import Tensor
-import matplotlib.pyplot as plt
-import torch.nn.functional as F
+import random
+import sys
+import gc
 from dotenv import load_dotenv
 from huggingface_hub import login
-from torch.cuda.amp import autocast, GradScaler
+from torch.utils.data import DataLoader
 from beir.datasets.data_loader import GenericDataLoader
-from transformers import AutoTokenizer, AutoModel
 sys.path.append('/mnt/hpc/work/mbouthil/MMATH-CM-Research-Project')
-from packages.marco_dataloader import MSMARCO
+from packages.llama import Llama_LM
+os.environ["PYTORCH_ALLOC_CONF"] = "expandable_segments:True"
 
-save_name='syn_q_sagent'
-test=False
-batch_size=64
+
+'''
+This script creates 100,000 agentic synthetic queries based on the corresponding qrels passages. 
+'''
 
 
 ### Loading data ###
+save_name='syn_q_sagent'
 data_dir = "/work/mbouthil/datasets/msmarco"
 corpus, _, qrels = GenericDataLoader(data_folder=data_dir).load(split="train")
-
-
-# Gathering 500_000 random qrels
-random.seed(42)
-J=500_000
-qrels = random.sample(list(qrels.items()), J)
-
-
-# Loading LM
-from packages.llama import Llama_LM
-llama = Llama_LM()
-
+qrels = list(qrels.items())
 
 ### Agent Prompts ###
 creation_prompt = '''You are a subject matter expert in your field with substantial accumulated knowledge in a
@@ -60,13 +45,14 @@ the question have an answer contained within each passage.
 If the question satisfies the condition, ensure your response contains "TRUE". Otherwise, ensure your response contains "FALSE".
 '''
 
+llama = Llama_LM()
 
 # Creating Batches
 def batch_splits(item:list, batch_size:int=64):
-
     for i in range(0, len(item), batch_size):
         yield item[i:i + batch_size]
-batches = batch_splits(qrels, batch_size=batch_size)
+
+batches = batch_splits(qrels)
 
 
 syn_dict=dict()
@@ -122,36 +108,26 @@ for batch in batches:
     counter += len(filtered)
     if counter >= 100_000:
         break
-    if test==True:
-        break
-
 
 
 ### Saving new dataset ###
-# Creating directories
 original_dir = "/work/mbouthil/datasets/msmarco"
 modified_dir = original_dir + "_" + save_name
 os.makedirs(modified_dir, exist_ok=True)
 os.makedirs(os.path.join(modified_dir, "qrels"), exist_ok=True)
 
-
-# Copying old Corpus 
 shutil.copy(
-    f"{original_dir}/corpus.jsonl", 
+    f"{original_dir}/corpus.jsonl",                                 # Copying old Corpus 
     f"{modified_dir}/corpus.jsonl"
 )
 
-
-# Saving synthetic queries
-queries_path = os.path.join(modified_dir, "queries.jsonl")
+queries_path = os.path.join(modified_dir, "queries.jsonl")          # Saving synthetic queries
 with open(queries_path, 'w') as f:
     for query_id, query_text in syn_dict.items():
         entry = {"_id": str(query_id), "text": query_text}
         f.write(json.dumps(entry) + '\n')
 
-
-# Saving qrels
-qrels_path = os.path.join(modified_dir, "qrels", "train.tsv")
+qrels_path = os.path.join(modified_dir, "qrels", "train.tsv")       # Saving qrels
 with open(qrels_path, 'w') as f:
     f.write("query-id\tcorpus-id\tscore\n")
     for query_id, doc_scores in new_qrels.items():

@@ -1,4 +1,3 @@
-# Loading Packages
 import random
 import os
 import json
@@ -16,19 +15,14 @@ os.environ["PYTORCH_ALLOC_CONF"] = "expandable_segments:True"
 
 
 '''
-This script creates K synthetic queries using few-shot prompting
+This script creates 100,000 few-shot synthetic queries based on the corresponding qrels passages. 
 '''
-
-test=False
-save_name='syn_q_fs'
-batch_size=64
-K=100_000                               # Currently set to K=len(qrels)-8 for job 40046
 
 
 ### Loading data ###
+save_name='syn_q_fs'
 data_dir = "/work/mbouthil/datasets/msmarco"
 corpus, queries, qrels = GenericDataLoader(data_folder=data_dir).load(split="train")
-
 
 ### Gathering 8 exmaples ###
 random.seed(39)
@@ -38,7 +32,7 @@ example_qrels=mulit_qrels+single_qrels
 
 # Removing few shot example qrels from data
 qrels = [(key, value) for key, value in qrels.items() if key not in dict(example_qrels).keys()]
-qrels=qrels[:K]
+qrels=qrels[:100_000]
 
 
 system_prompt = '''You are a subject matter expert in your field with substantial accumulated knowledge in a
@@ -69,7 +63,7 @@ system_prompt=system_prompt.format(examples="\n\n".join(examples))
 del queries
 
 
-def batch_splits(item:list, batch_size:int=batch_size):
+def batch_splits(item:list, batch_size:int=64):
 
     for i in range(0, len(item), batch_size):
         yield item[i:i + batch_size]
@@ -107,38 +101,28 @@ for batch in batches:
     for i, q_id in enumerate(q_ids):
         syn_dict[q_id] = syn_queries[i]
 
-    if test == True:
-        break
-
 qrels=dict(qrels)
 qrels=dict([(key, value) for key, value in qrels.items() if key in syn_dict.keys()])
 
 
 ### Saving new dataset ###
-# Creating directories
 original_dir = "/work/mbouthil/datasets/msmarco"
 modified_dir = original_dir + "_" + save_name
 os.makedirs(modified_dir, exist_ok=True)
 os.makedirs(os.path.join(modified_dir, "qrels"), exist_ok=True)
 
-
-# Copying old Corpus 
-shutil.copy(
+shutil.copy(                                                        # Copying old Corpus 
     f"{original_dir}/corpus.jsonl", 
     f"{modified_dir}/corpus.jsonl"
 )
 
-
-# Saving synthetic queries
-queries_path = os.path.join(modified_dir, "queries.jsonl")
+queries_path = os.path.join(modified_dir, "queries.jsonl")          # Saving synthetic queries
 with open(queries_path, 'w') as f:
     for query_id, query_text in syn_dict.items():
         entry = {"_id": str(query_id), "text": query_text}
         f.write(json.dumps(entry) + '\n')
 
-
-# Saving qrels
-qrels_path = os.path.join(modified_dir, "qrels", "train.tsv")
+qrels_path = os.path.join(modified_dir, "qrels", "train.tsv")       # Saving qrels
 with open(qrels_path, 'w') as f:
     f.write("query-id\tcorpus-id\tscore\n")
     for query_id, doc_scores in qrels.items():
