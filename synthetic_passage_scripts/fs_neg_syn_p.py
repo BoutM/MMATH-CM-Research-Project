@@ -1,16 +1,12 @@
 import os
-import re
-import gc
 import sys
 import json
-import torch
 import shutil
 import random
-import numpy as np
 import tqdm as tqdm
 from dotenv import load_dotenv
 from beir.datasets.data_loader import GenericDataLoader
-from transformers import AutoTokenizer, logging, AutoModelForCausalLM
+from transformers import logging
 logging.set_verbosity_error()
 sys.path.append('/mnt/hpc/work/mbouthil/MMATH-CM-Research-Project')
 from packages.llama import Llama_LM

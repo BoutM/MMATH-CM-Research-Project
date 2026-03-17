@@ -15,8 +15,13 @@ import torch.nn.functional as F
 from beir.retrieval.evaluation import EvaluateRetrieval
 
 
+'''
+This script evaluates the performance of the specified model using nDCG@10, MMR@10, Recall@100, and Recall@1000.
+'''
+
 model_name = "r400s_sq2-v3"
 dir= "/work/mbouthil/MMATH-CM-Research-Project/retreiver_training/retrieval_data/"
+
 
 try:
     index = faiss.read_index(f"{dir}{model_name}.index")

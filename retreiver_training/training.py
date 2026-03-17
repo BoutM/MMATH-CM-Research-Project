@@ -24,41 +24,30 @@ from packages.marco_dataloader import MSMARCO
 
 
 ##########
-### Parameters ###
+### Training Specifications ###
 batch_size=256
 tau=0.03
 learning_rate=2e-5
 steps=400
 plot_loss=True
-
-
 ibn=1
 K=100_000
-
-### Dataset ###
 dataset_dir = "/work/mbouthil/datasets/msmarco_syn_q_v2-v3"
-
-### Model Name ###
 model_name = "r400s_sq2-v3"
 ##########
 
-
 passages, queries, qrels = GenericDataLoader(data_folder=dataset_dir).load(split="train")
-
-device = "cuda" if torch.cuda.is_available() else "cpu"
-# queries = {**dict(list(queries.items())[:K]),
-#             **dict(random.sample(list(queries.items())[N:], J))}
 queries= dict(list(queries.items())[:K])
-
 data = MSMARCO(queries, 
                qrels, 
                passages, batch_negatives=ibn)
 
 
+device = "cuda" if torch.cuda.is_available() else "cpu"
 
-### Tokenizer ###
 tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
 
+### Tokenizers ###
 def query_tok(queries:list[str], max_length:int=32) -> dict:
     with torch.no_grad():
         inputs = tokenizer(

@@ -5,35 +5,29 @@ import sys
 import torch
 import faiss
 import numpy as np
-import pandas as pd
 from tqdm import tqdm
-from torch import Tensor
 from dotenv import load_dotenv
 from huggingface_hub import login
 import torch.nn.functional as F
 os.environ["HF_HUB_DISABLE_PROGRESS_BARS"] = "1"
-from transformers import AutoTokenizer, logging, AutoModel
-from beir.datasets.data_loader import GenericDataLoader
-from beir.retrieval.evaluation import EvaluateRetrieval
+from transformers import AutoTokenizer, AutoModel
 
 
 '''
-This script is to be used in the event that OOM/memory issues occur
-in the creation of the embeddings
+This script is to be used in the event that OOM/memory issues occurs after training within the training.py script.
 '''
 
 write_embeddings=True
-model_name = "r400s_sqa2"
-
+model_name = "r400s_sq2-v2"
 
 corpus_path = "/work/mbouthil/datasets/msmarco/corpus.jsonl"
 output_dir = "/work/mbouthil/MMATH-CM-Research-Project/retreiver_training/retrieval_data"
 embeddings_path = f"{output_dir}/embeddings_{model_name}.npy"
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
+N = 8_841_823       # Corpus entries
+d = 768             # BERT embedding dimension
 
-N = 8_841_823
-d = 768    
 
 if write_embeddings==True:
     def stream_msmarco_chunks(path, chunk_size=5000):
