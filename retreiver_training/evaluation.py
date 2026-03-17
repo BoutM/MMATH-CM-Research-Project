@@ -19,45 +19,45 @@ from beir.retrieval.evaluation import EvaluateRetrieval
 This script evaluates the performance of the specified model using nDCG@10, MMR@10, Recall@100, and Recall@1000.
 '''
 
-model_name = "r400s_sq2-v3"
+model_name = "r400s_sq-v2"
 dir= "/work/mbouthil/MMATH-CM-Research-Project/retreiver_training/retrieval_data/"
 
 
-try:
-    index = faiss.read_index(f"{dir}{model_name}.index")
-    print('Index available')
-except:
-    print('Index unavailable: reading embeddings')
-    embeddings_path = f"{dir}embeddings_{model_name}.npy"
-    N = 8_841_823                     
-    d = 768  
+# try:
+index = faiss.read_index(f"{dir}{model_name}.index")
+print('Index available')
+# except:
+#     print('Index unavailable: reading embeddings')
+#     embeddings_path = f"{dir}embeddings_{model_name}.npy"
+#     N = 8_841_823                     
+#     d = 768  
 
-    ### Reading memmap ###
-    embeddings = np.memmap(
-        embeddings_path,
-        dtype='float32',
-        mode='r',
-        shape=(N, d)
-    )
+#     ### Reading memmap ###
+#     embeddings = np.memmap(
+#         embeddings_path,
+#         dtype='float32',
+#         mode='r',
+#         shape=(N, d)
+#     )
 
-    print("Writting embeddings")
-    ### Writting index ###
-    index = faiss.IndexFlatIP(d)
-    chunk_size = 100_000
+#     print("Writting embeddings")
+#     ### Writting index ###
+#     index = faiss.IndexFlatIP(d)
+#     chunk_size = 100_000
 
-    for start_idx in range(0, N, chunk_size):
-        end_idx = min(start_idx + chunk_size, N)
-        chunk_emb = embeddings[start_idx:end_idx]
-        index.add(chunk_emb)
-        del chunk_emb
-        gc.collect()
+#     for start_idx in range(0, N, chunk_size):
+#         end_idx = min(start_idx + chunk_size, N)
+#         chunk_emb = embeddings[start_idx:end_idx]
+#         index.add(chunk_emb)
+#         del chunk_emb
+#         gc.collect()
 
-    faiss.write_index(index, f"{dir}{model_name}.index")
-    del embeddings, index
-    gc.collect()
+#     faiss.write_index(index, f"{dir}{model_name}.index")
+#     del embeddings, index
+#     gc.collect()
 
-    # Loading Index
-    index = faiss.read_index(f"{dir}{model_name}.index")
+#     # Loading Index
+#     index = faiss.read_index(f"{dir}{model_name}.index")
 
 
 print('Evaluation in progress...')

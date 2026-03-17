@@ -4,7 +4,6 @@ import gc
 import torch
 import faiss
 import json
-import random
 import torch
 import time
 import sys
@@ -30,10 +29,10 @@ tau=0.03
 learning_rate=2e-5
 steps=400
 plot_loss=True
-ibn=1
+ibn=0
 K=100_000
-dataset_dir = "/work/mbouthil/datasets/msmarco_syn_q_v2-v3"
-model_name = "r400s_sq2-v3"
+dataset_dir = "/work/mbouthil/datasets/msmarco_syn_q_1.2"
+model_name = "r400s_sq1.2"
 ##########
 
 passages, queries, qrels = GenericDataLoader(data_folder=dataset_dir).load(split="train")

@@ -18,7 +18,7 @@ This script is to be used in the event that OOM/memory issues occurs after train
 '''
 
 write_embeddings=True
-model_name = "r400s_sq2-v2"
+model_name = "r400s_sq-v2"
 
 corpus_path = "/work/mbouthil/datasets/msmarco/corpus.jsonl"
 output_dir = "/work/mbouthil/MMATH-CM-Research-Project/retreiver_training/retrieval_data"
