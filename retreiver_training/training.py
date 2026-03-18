@@ -29,10 +29,10 @@ tau=0.03
 learning_rate=2e-5
 steps=400
 plot_loss=True
-ibn=0
+ibn=1
 K=100_000
-dataset_dir = "/work/mbouthil/datasets/msmarco_syn_q_1.2"
-model_name = "r400s_sq1.2"
+dataset_dir = "/work/mbouthil/datasets/msmarco_syn_q-fs"
+model_name = "r400s_sq-fs"
 ##########
 
 passages, queries, qrels = GenericDataLoader(data_folder=dataset_dir).load(split="train")

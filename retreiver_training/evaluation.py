@@ -19,7 +19,7 @@ from beir.retrieval.evaluation import EvaluateRetrieval
 This script evaluates the performance of the specified model using nDCG@10, MMR@10, Recall@100, and Recall@1000.
 '''
 
-model_name = "r400s_sq-v2"
+model_name = "r400s_sq1.2"
 dir= "/work/mbouthil/MMATH-CM-Research-Project/retreiver_training/retrieval_data/"
 
 
