@@ -15,12 +15,12 @@ os.environ["PYTORCH_ALLOC_CONF"] = "expandable_segments:True"
 
 
 '''
-This script creates 100,000 few-shot agentic synthetic queries based on the corresponding qrels passages. 
+This script creates K few-shot agentic synthetic queries based on the corresponding qrels passages. 
 '''
-
+K=200_000
 
 ### Loading data ###
-save_name='syn_q_fs_agent'
+save_name='syn_q_fs_agent_200k'
 data_dir = "/work/mbouthil/datasets/msmarco"
 corpus, queries, qrels = GenericDataLoader(data_folder=data_dir).load(split="train")
 
@@ -131,7 +131,7 @@ for batch in batches:
         new_qrels[q_id] = qrels[q_id]
 
     counter+=len(filtered)
-    if counter>=100_000:
+    if counter>=K:
         break
 
 

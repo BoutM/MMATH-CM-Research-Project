@@ -17,10 +17,10 @@ os.environ["PYTORCH_ALLOC_CONF"] = "expandable_segments:True"
 '''
 This script creates 100,000 few-shot synthetic queries based on the corresponding qrels passages. 
 '''
-
+K=200_000
 
 ### Loading data ###
-save_name='syn_q_fs'
+save_name='syn_q_200k_fs'
 data_dir = "/work/mbouthil/datasets/msmarco"
 corpus, queries, qrels = GenericDataLoader(data_folder=data_dir).load(split="train")
 
@@ -32,7 +32,7 @@ example_qrels=mulit_qrels+single_qrels
 
 # Removing few shot example qrels from data
 qrels = [(key, value) for key, value in qrels.items() if key not in dict(example_qrels).keys()]
-qrels=qrels[:100_000]
+qrels=qrels[:K]
 
 
 system_prompt = '''You are a subject matter expert in your field with substantial accumulated knowledge in a

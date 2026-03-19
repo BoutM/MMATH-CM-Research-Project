@@ -18,8 +18,8 @@ from packages.llama import Llama_LM
 
 # This script adds negative passages to the desired dataset
 
-K=100_000
-old_dataset_name = 'syn_q_fs_agent'
+K=200_000
+old_dataset_name = 'syn_q_200k'
 new_dataset_name = old_dataset_name+'-'
 
 # Loading Data

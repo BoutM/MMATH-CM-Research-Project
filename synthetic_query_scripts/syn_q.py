@@ -14,15 +14,15 @@ from packages.llama import Llama_LM
 
 
 '''
-This script creates 100,000 zero shot synthetic queries based on the corresponding qrels passages. 
+This script creates K zero-shot synthetic queries based on the corresponding qrels passages. 
 '''
-
+K=200_000
 
 ### Loading data ###
-save_name='syn_q_v2'
+save_name='syn_q_200k'
 data_dir = "/work/mbouthil/datasets/msmarco"
 corpus, _, qrels = GenericDataLoader(data_folder=data_dir).load(split="train")
-qrels = list(qrels.items())[:100_000]
+qrels = list(qrels.items())[:K]
 
 
 system_prompt = '''You are a subject matter expert in your field with substantial accumulated knowledge in a

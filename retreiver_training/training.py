@@ -8,6 +8,7 @@ import torch
 import time
 import sys
 import gc
+import pandas as pd
 import torch.nn as nn
 from tqdm import tqdm
 from torch import Tensor
@@ -27,12 +28,12 @@ from packages.marco_dataloader import MSMARCO
 batch_size=256
 tau=0.03
 learning_rate=2e-5
-steps=400
+steps=800
 plot_loss=True
 ibn=1
-K=100_000
-dataset_dir = "/work/mbouthil/datasets/msmarco_syn_q-fs"
-model_name = "r400s_sq-fs"
+K=200_000
+dataset_dir = "/work/mbouthil/datasets/msmarco_syn_q_200k-"
+model_name = "r800s_sq-"
 ##########
 
 passages, queries, qrels = GenericDataLoader(data_folder=dataset_dir).load(split="train")
@@ -169,6 +170,10 @@ save_dir = "/work/mbouthil/MMATH-CM-Research-Project/retreiver_training/model_we
 model.query_encoder.save_pretrained(f"{save_dir}/query_encoder_{model_name}")
 model.passage_encoder.save_pretrained(f"{save_dir}/passage_encoder_{model_name}")
 
+### Saving loss ###
+step_loss = pd.DataFrame({f"{model_name}": step_loss})
+step_loss.to_csv(f"/work/mbouthil/MMATH-CM-Research-Project/results/{model_name}_loss.csv", index=False)
+
 
 ### Cleaning Env ###
 del queries, passages, qrels, step_loss, data
@@ -281,7 +286,7 @@ embeddings = np.memmap(
 )
 
 ### Writting index ###
-print("writting index")
+print("Writting index")
 index = faiss.IndexFlatIP(d)
 chunk_size = 100_000
 
@@ -292,6 +297,6 @@ for start_idx in range(0, N, chunk_size):
     del chunk_emb
     gc.collect()
 
-faiss.write_index(index, f"{output_dir}/passage_{model_name}.index")
+faiss.write_index(index, f"{output_dir}/{model_name}.index")
 
-print("Traing and vector database construction completed")
+print("Traing and Index construction completed")

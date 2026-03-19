@@ -15,33 +15,23 @@ os.environ["PYTORCH_ALLOC_CONF"] = "expandable_segments:True"
 
 
 '''
-This script creates 100,000 agnetic synthetic queries based on the corresponding qrels passages. 
+This script creates K agentic synthetic queries based on the corresponding qrels passages. 
 '''
-
+K=200_000
 
 ### Loading data ###
-save_name='syn_q_agent_2'
+save_name='syn_q_agent2_200k'
 data_dir = "/work/mbouthil/datasets/msmarco"
 corpus, _, qrels = GenericDataLoader(data_folder=data_dir).load(split="train")
 qrels = list(qrels.items())
 
+
 ### Agent Prompts ###
-cot_prompt='''You are a subject matter expert in your field with substantial accumulated knowledge in a
-specific subject or topic, validated by academic degrees, certifications, and/or years of
-professional experience in that field.
-
-You will be provided passage(s). Your task is to provide hypothetical questions which are answered by the contents of the passage(s). 
-
-Provide your questions:
-'''
-
 creation_prompt = '''You are a subject matter expert in your field with substantial accumulated knowledge in a
 specific subject or topic, validated by academic degrees, certifications, and/or years of
 professional experience in that field.
 
 Write a single question that elaborates on the provided passage(s). This question must be answered by the passage(s). 
-
-Moreover, you will be provided example questions to help guide you.
 
 Provide only the question and format it as follows:**question**.
 '''
@@ -56,15 +46,14 @@ the question have an answer contained within each passage.
 If the question satisfies the condition, ensure your response contains "TRUE". Otherwise, ensure your response contains "FALSE".
 '''
 
-# Loading LM
 llama = Llama_LM()
 
 # Creating Batches
 def batch_splits(item:list, batch_size:int=64):
-
     for i in range(0, len(item), batch_size):
         yield item[i:i + batch_size]
-batches = batch_splits(qrels, batch_size=64)
+
+batches = batch_splits(qrels)
 
 
 syn_dict=dict()
@@ -89,27 +78,15 @@ for batch in batches:
         else:
             passages.append(corpus[p_ids[0]]['text'])
 
-    
-    cot_messages = [
-        [
-            {"role": "system", "content": cot_prompt},
-            {"role": "user", "content": passage}
-        ]
-        for passage in passages
-    ]
-
-    cot_responses = llama.prompt(cot_messages, da_wrap=False)
-    del cot_messages
-
     creation_messages = [
         [
             {"role": "system", "content": creation_prompt},
-            {"role": "user", "content": f"{passages[i]}\nExample questions:\n{examples}"}
+            {"role": "user", "content": f"{passage}"}
         ]
-        for i, examples in enumerate(cot_responses)
+        for passage in passages
     ]
     syn_queries = llama.prompt(creation_messages)
-    del cot_responses, creation_messages
+    del creation_messages
 
     judge_messages = [
         [
@@ -130,8 +107,9 @@ for batch in batches:
 
 
     counter += len(filtered)
-    if counter >= 100_000:
+    if counter >= K:
         break
+
 
 ### Saving new dataset ###
 original_dir = "/work/mbouthil/datasets/msmarco"
