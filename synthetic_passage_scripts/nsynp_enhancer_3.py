@@ -19,9 +19,9 @@ from packages.llama import Llama_LM
 '''This script changes the prompt engineering of the enhancer v2 script'''
 
 
-K=100_000
+K=200_000
 test=False
-old_dataset_name = 'syn_q_v2'
+old_dataset_name = 'syn_q_200k'
 new_dataset_name = old_dataset_name+'-v3'
 
 # Loading Data

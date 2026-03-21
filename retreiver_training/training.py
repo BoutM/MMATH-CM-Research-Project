@@ -32,8 +32,8 @@ steps=800
 plot_loss=True
 ibn=1
 K=200_000
-dataset_dir = "/work/mbouthil/datasets/msmarco_syn_q_200k-"
-model_name = "r800s_sq-"
+dataset_dir = "/work/mbouthil/datasets/msmarco_syn_q_fs_agent_200k-"
+model_name = "r800s_sqfsa-"
 ##########
 
 passages, queries, qrels = GenericDataLoader(data_folder=dataset_dir).load(split="train")
