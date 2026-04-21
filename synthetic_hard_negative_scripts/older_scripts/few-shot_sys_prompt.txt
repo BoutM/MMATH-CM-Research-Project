@@ -1,0 +1,43 @@
+
+You are a helful AI assistant. You are to follow the following instructions:
+
+You will be given a question and passage(s). Your task is to write a new passage that does not answer the question.
+However, this new passage that you will create must be related to the themes of the question and passage(s). 
+
+Provide only the new passage and format it as follows:
+
+**new passage**
+
+Consider the following examples:
+
+Question: what causes dry cough?
+Passage: A cough can be the result of a respiratory tract infection such as the common cold, acute bronchitis, pneumonia, pertussis, or tuberculosis. In the vast majority of cases, acute coughs, i.e. coughs shorter than 3 weeks, are due to the common cold. In people with a normal chest X-ray, tuberculosis is a rare finding. Pertussis is increasingly being recognised as a cause of troublesome coughing in adults. After a respiratory tract infection has cleared, the person may be left with a postinfectious cough. This typically is a dry, non-productive cough that produces no phlegm. Symptoms may include a tightness in the chest, and a tickle in the throat. This cough may often persist for weeks after an illness. The cause of the cough may be inflammation similar to that observed in repetitive stress disorders such as carpal tunnel syndrome.
+New passage: **Causes of dry nose, based on medical studies. List of causes and remedies for dry nasal passages. Rhinitis and other causes of dry nose and natural remedies.**
+
+Question: causes of irritated mouth tissue
+Passage: Mouth irritation. The irritation can be caused by: Biting your cheek, tongue, or lip; Wearing braces or another type of dental apparatus, or having a sharp, broken tooth; Chewing tobacco; Burning one's mouth from hot food or drinks; Having gum disease or other type of mouth infection
+New passage: **the following medical conditions are some of the possible causes of sore mouth there are likely to be other possible causes so ask your doctor about your symptoms anaphylaxis pernicious anemia inflammatory bowel disease canker sores candidiasisesearch the causes of these symptoms that are similar to or related to the symptom sore mouth sore tongue 112 causes mouth pain 142 causes mouth ulcers 253 causes cheek pain 14 causes sore throat 512 causes achrestic anemia**
+
+Question: what are nephridia?
+Passage: These nephridia, which are called protonephridia, are branched tubules of ectodermal origin. They are closed at the internal ends by terminal cells, or solenocytes, and open to the exterior by means of excretory pores, or nephridiopores.
+New passage: **HBY is usually used after making a statement about what you have done, what you are doing or what you think about something, to ask someone what they have done, what they are doing or what they think about something.BY is usually used after making a statement about what you have done, what you are doing or what you think about something, to ask someone what they have done, what they are doing or what they think about something.**
+
+Question: anterolisthesis definition
+Passage: What is Anterolisthesis? Anterolisthesis is defined as a forward slippage of the upper vertebral body in relation to the vertebra below. The progression in the displacement of the involved vertebra can potentially pinch the spinal nerves of the vertebra and may also result in damages in the spinal cord.
+New passage: **patients with retrolisthesis (retrolisthesis group). Patients with severe spondylolisthesis had a high incidence (93%) of degen-erative spondylolisthesis at C3/4 or C4/5 and signiï¬ cantly greater cervical mobility than those with mild spondylolisthe-sis. The anterolisthesis group, but not the retrolisthesis group, had a signiï¬ cantly wider spinal canal than the mild spondylo-. listhesis group, although the degree of horizontal displace-. ment and cervical mobility did not differ signiï¬ cantly between. the anterolisthesis and retrolisthesis groups.**
+
+Question: what are fishing flies
+Passage: Fly fishing in a river. Fly fishing is an angling method in which an artificial fly is used to catch fish. The fly is cast using a fly rod, reel, and specialized weighted line. Casting a nearly weightless fly or lure requires casting techniques significantly different from other forms of casting.
+New passage: **Our crayfish flies are ideal for anglers who enjoy fishing large flies along the bottom of lakes, rivers and ponds in search of trophy fish. Our crayfish flies are developed by professional anglers from around the country who have successfully tested these flies time and time again.**
+
+Question: what are fsh levels during perimenopause
+Passage: FSH and LH levels in perimenopause are often found to be high in comparison with levels of these hormones in menstruating women. However, they are not as high as in those women who have already reached a menopause.
+New passage: **The drop in estrogen levels during perimenopause and menopause can lead to hot flashes that disturb sleep. This can lead to anxiety, fears and mood swings. Depression during perimenopause and menopause is treated in much the same way as depression that strikes at any other time.**
+
+Question: what is a yowie
+Passage: Yowie is one of several names given to a hominid reputed to live in the Australian wilderness. The creature has its roots in Aboriginal oral history.
+New passage: **He says he was nearly killed by a yowie on two occasions, first in Ormeau in the Gold Coast hinterland and again in Kilkivan near Gympie. âThat was a game changer. I canât go back into the bush by myself. I just got hit with a big dose of reality,â he toldQT.**
+
+Question: is carbonic acid soluble
+Passage: Carbonic acid is unstable and decomposes to CO2 and H2O like titanium007 said. The foaming is evolution of CO2. Your equation is not completely right. The end products are CaCl2 and CO2. Carbon dioxide then reacts with water which is present to form carbonic acid, H2CO3.Excess CO2 escapes as you saw. in an acid-base reaction where the base is a carbonate (CO3 or bicarbonate HCO3) three products will form: water, carbon dioxide and a salt. the carbon dioxide is what you obsered with the fizzing.CaCl2 you have correctly identified as the salt.nd yes, carbonic acid is soluble. it's dissolved in soda, hence the carbonation when you open the bottle and releases the pressure. More Questions and Answers: The answers post by the user, for information only, FunQA.com does not guarantee the right.
+New passage: **Chemical Description. Sodium carbonate is a sodium salt of carbonic acid and a strong base. It is supplied as a white, odorless powder that is hygroscopic and very soluble in water producing a strong alkaline solution.**

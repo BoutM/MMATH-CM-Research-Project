@@ -28,12 +28,12 @@ from packages.marco_dataloader import MSMARCO
 batch_size=256
 tau=0.03
 learning_rate=2e-5
-steps=800
+steps=400
 plot_loss=True
 ibn=1
-K=200_000
-dataset_dir = "/work/mbouthil/datasets/msmarco_syn_q_fs_agent_200k-"
-model_name = "r800s_sqfsa-"
+K=100_000
+dataset_dir = "/work/mbouthil/datasets/msmarco_sqa2-"
+model_name = "r400s_sqa2-v1_final"
 ##########
 
 passages, queries, qrels = GenericDataLoader(data_folder=dataset_dir).load(split="train")
@@ -115,10 +115,26 @@ def contrastive_loss(q_emb:Tensor, p_emb:Tensor, tau:float=tau) -> Tensor:
     p_emb = F.normalize(p_emb, dim=-1)                      # Normalizing
     
     scores = torch.matmul(q_emb, p_emb.T)/tau       # Calculating similarity scores (cosine similarity)
+    print(scores.shape)
+    # print(scores)
     labels = torch.arange(M) * int(L/M)                     # Gathering labels
+    # print("Scores matrix shape:", scores.shape)
+    # print("Scores mean:", scores.mean().item())
+    # print("Scores min:", scores.min().item())
+    # print("Scores max:", scores.max().item())
+
+    # # Separate positive and negative similarities
+    # positive_scores = scores[torch.arange(M), labels]
+    # negative_mask = torch.ones_like(scores, dtype=torch.bool)
+    # negative_mask[torch.arange(M), labels] = False
+    # negative_scores = scores[negative_mask]
+
+    # print("Positive similarity mean:", positive_scores.mean().item())
+    # print("Negative similarity mean:", negative_scores.mean().item())
     labels = labels.to(device=scores.device)
 
     loss = F.cross_entropy(scores, labels)                  # Calculating Cross Entropy Loss = Info NCE
+    # print(loss)
     return loss
 
 
@@ -133,6 +149,7 @@ for step in tqdm(range(steps), file=sys.stdout):
 
     start=time.time()
     batch=data.fetch()
+    print(f"Batch size returned: {len(batch)}")
     queries, passages = zip(*batch)
     passages=[x for sublist in passages for x in sublist]
 
@@ -151,6 +168,7 @@ for step in tqdm(range(steps), file=sys.stdout):
         scaler.update()
 
 print('Training complete')
+
 
 
 ### Plotting Loss ###
