@@ -1,10 +1,13 @@
-# Enhancing Information Retrieval Systems with Agentic Synthetic Data Augmentation 
+# Synthetic Data Generation for Dense Retrieval: A Comparison of LLM Prompting and Agentic Approaches
 
-### MMATH CM Masters Reserach Proejct 
+### Univeristy of Waterloo MMATH CM Masters Research Thesis
 
 Maxime Bouthillier
 
 **Supervisors:** Giang Tran, PhD, Saeed Ghadimi, PhD
 
+<br>
 
-This research project is on going, and will be completed by the end of April! Stay tuned! 
+This project explores zero-shot, few-shot and agentic frameworks to generate synthetic nature text query data to train domain specific dense retrivers. 
+
+<br>
