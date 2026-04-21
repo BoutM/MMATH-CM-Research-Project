@@ -5,6 +5,11 @@ from dotenv import load_dotenv
 from transformers import AutoTokenizer, logging, AutoModelForCausalLM
 logging.set_verbosity_error()
 
+'''
+Simply package to facilitate the loading and prompting of 
+the Llama 3.1 8 Billion Instruct model
+'''
+
 
 ### Loading LM Model ###
 load_dotenv('/work/mbouthil/MMATH-CM-Research-Project/token.env')

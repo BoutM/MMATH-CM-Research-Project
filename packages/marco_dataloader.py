@@ -1,5 +1,9 @@
 import random
 
+'''
+Simply package to facilitate the data loading of the MS MARCO dataset.
+'''
+
 class MSMARCO:
     def __init__(self,
                  queries:dict,
